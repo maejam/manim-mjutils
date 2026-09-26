@@ -13,7 +13,7 @@ from PIL import Image
 T = TypeVar("T", bound=m.Mobject)
 
 
-class GroupDict(m.Group, Generic[T]):
+class GroupDict(m.Mobject, Generic[T]):
     """A VDict equivalent for Mobjects.
 
     Allows string labels access to submobjects. Does not implement displaying the keys.

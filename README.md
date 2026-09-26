@@ -10,7 +10,7 @@
   - [ui](#ui)
     - [Buttons](#Buttons)
     - [Cursor](#Cursor)
-  - [groups](#groups)
+  - [mobjects](#mobjects)
   - [geometry](#geometry)
 
 ---
@@ -331,9 +331,9 @@ class CursorDemo(Scene):
 ```  
 
 
-### Groups  
+### Mobjects  
 
-Simple (V)Groups-related utilities.
+Simple (V)Mobjects-related utilities.
 
 * `GroupDict`: similar to `VDict` for Mobjects. Does not handle displaying keys.
 

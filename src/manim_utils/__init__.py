@@ -6,7 +6,7 @@ from .code import highlight_code as highlight_code
 from .geometry import clip_vmobject as clip_vmobject
 from .geometry import get_bounds as get_bounds
 from .geometry import is_inside_bounds as is_inside_bounds
-from .groups import GroupDict as GroupDict
-from .groups import IconText as IconText
-from .groups import VIconText as VIconText
+from .mobjects import GroupDict as GroupDict
+from .mobjects import IconText as IconText
+from .mobjects import VIconText as VIconText
 from .stencil import Stencil as Stencil
