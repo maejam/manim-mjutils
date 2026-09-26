@@ -10,3 +10,4 @@ from .mobjects import GroupDict as GroupDict
 from .mobjects import IconText as IconText
 from .mobjects import VIconText as VIconText
 from .stencil import Stencil as Stencil
+from .typing_ import V as V
