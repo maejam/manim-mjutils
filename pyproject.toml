@@ -1,6 +1,6 @@
 [project]
 name = "manim-utils"
-version = "0.2.0"
+version = "0.3.0"
 description = "A collection of manim utilities."
 authors = [
       {name="maejam", email = "git.rejoice553@passmail.net"},
