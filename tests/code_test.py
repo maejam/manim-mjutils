@@ -16,6 +16,9 @@ def strip_pango_tags(text):
 
     # Remove all remaining tags (<tt>, <span>, etc.) but KEEP the text inside.
     text = re.sub(r"<[^>]+>", "", text)
+
+    # Remove leading dot
+    text = text[1:]
     return text
 
 
@@ -294,3 +297,17 @@ drwxrwxr-x 24 mj mj   4096 mars  17 14:45 ..
         "drwxrwxr-x 24 mj mj   4096 mars  17 14:45 ..",
     ]
     print(plain)
+
+
+def test_markup_includes_font_and_color():
+    code = "def hello():\n    pass"
+    output = highlight_code(code_string=code, font="Fira Code", style="vim")
+    assert (
+        output.lines[0].text
+        == '.<tt><spanfgcolor="#cccccc"font="FiraCode">defhello():</span></tt>'
+    )
+    output = highlight_code(code_string=code, font="Fira Code", style="algol")
+    assert (
+        output.lines[0].text
+        == '.<tt><spanfgcolor="#000000"font="FiraCode">defhello():</span></tt>'
+    )

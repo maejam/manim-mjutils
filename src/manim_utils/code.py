@@ -1,6 +1,7 @@
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pygments
 from manim import ManimColor
@@ -10,6 +11,7 @@ from pygments.formatters import PangoMarkupFormatter
 from pygments.lexer import Lexer
 from pygments.lexers import get_lexer_by_name, guess_lexer, guess_lexer_for_filename
 from pygments.styles import get_all_styles
+from pygments.util import html_escape
 
 
 @dataclass
@@ -18,6 +20,34 @@ class HighlightedCode:
 
     lines: list[MarkupText]
     bgcolor: ManimColor
+
+
+class ManimPangoFomatter(PangoMarkupFormatter[str]):
+    def __init__(self, **options: Any) -> None:
+        Formatter.__init__(self, **options)
+
+        self.styles = {}
+
+        font = html_escape(options.get("font", "Monospace"))
+
+        for token, style in self.style:
+            # NOTE: Define a fallback color otherwise some styles are not rendered
+            # properly (e.g. `algol`)
+            color = style.get("color", "000000") if style["color"] else "000000"
+
+            start = f'<span fgcolor="#{color}" font="{font}">'
+            end = "</span>"
+
+            if style["bold"]:
+                start += "<b>"
+                end = "</b>" + end
+            if style["italic"]:
+                start += "<i>"
+                end = "</i>" + end
+            if style["underline"]:
+                start += "<u>"
+                end = "</u>" + end
+            self.styles[token] = (start, end)
 
 
 def highlight_code(
@@ -108,21 +138,18 @@ def highlight_code(
     else:
         raise ValueError("Either a code file or a code string must be specified.")
 
-    formatter = PangoMarkupFormatter(style=style)
     code_string = code_string.expandtabs(tabsize=tab_width).lstrip("\n")
     if dedent:
         code_string = textwrap.dedent(code_string)
 
+    formatter = ManimPangoFomatter(style=style, font=font)
     highlighted = _highlight_as_pango_lines(code_string, lexer, formatter)
 
     def prepare_line(line: str) -> MarkupText:
         # NOTE: add leading dot to preserve indentation when building the MarkupText.
         # Needs to be done after highlighting to not mess with the lexer
         dotted = "." + line
-        # NOTE: Define a fallback color otherwise some styles are not rendered properly
-        # e.g. `algol`
-        wrapped = f'<span foreground="#000000">{dotted}</span>'
-        markup = MarkupText(wrapped, font=font, font_size=font_size)
+        markup = MarkupText(dotted, font_size=font_size)
         markup[0].set_opacity(0)
         return markup
 
