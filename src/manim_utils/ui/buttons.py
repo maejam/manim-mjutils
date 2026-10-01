@@ -413,7 +413,7 @@ class ButtonDict(m.VGroup):
         super().add(button)
         self._data[key] = button
 
-    def __getitem__(self, key: str) -> Button:
+    def __getitem__(self, key: str) -> Button:  # type: ignore[override]
         return self._data[key]
 
     def __delitem__(self, key: str) -> None:
@@ -424,7 +424,7 @@ class ButtonDict(m.VGroup):
     def __contains__(self, key: str) -> bool:
         return key in self._data
 
-    def __iter__(self) -> Iterator[str]:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         return iter(self._data)
 
     def __len__(self) -> int:

@@ -141,7 +141,7 @@ def get_bounds(
         v_min = np.min(all_v_mins, axis=0)
         v_max = np.max(all_v_maxs, axis=0)
 
-    center = m.midpoint(v_min, v_max)
+    center = m.midpoint(list(v_min), list(v_max))
 
     if not as_len:
         return cast(tuple[Point3D, Point3D, Point3D], (v_min, center, v_max))
@@ -235,8 +235,8 @@ def clip_vmobject(
     It is superior to the built-in :class:`manim.Intersection` in 4 ways:
      - it accepts directly composite vmobjects such as VGroup or Text.
      - style preserving: the style of the subject is preserved.
-     - it scales much better for complex vmobjects with many submobjects. Though it is
-       a bit slower for simple shapes.
+     - it scales much better for complex vmobjects with many submobjects. It is
+       a bit slower for simple shapes though.
      - submobjects that intersect the clipper can be discarded with strict=True.
 
     Parameters
@@ -261,21 +261,24 @@ def clip_vmobject(
     Notes
     -----
      - Only the inside of the clipper stroke is considered: a vmobject touching
-       the stroke of the clipper is considered to be outside of it.
+       the outer stroke of the clipper is considered to be outside of it.
      - Unlike Intersection, the order matters here:
        (clip_vmobject(square, circle) != clip_vmobject(circle, square)).
 
     """
-    clipper_family = clipper.family_members_with_points()
+    clipper_family = cast(list[m.VMobject], clipper.family_members_with_points())
     if not clipper_family:
-        return m.VGroup(
-            *(child.copy() for child in subject.family_members_with_points())
+        vmobs = cast(
+            list[m.VMobject],
+            [child.copy() for child in subject.family_members_with_points()],
         )
+        return m.VGroup(vmobs)
 
     clipper_bounds = get_bounds(clipper, as_len=False, include_stroke=False)
     result_group = m.VGroup()
 
     for child in subject.family_members_with_points():
+        child = cast(m.VMobject, child)
         # if child fully inside clipper: keep it
         if is_inside_bounds(
             child, bounds=clipper_bounds, strict=True, include_stroke=False
