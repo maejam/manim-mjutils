@@ -116,6 +116,7 @@ class CartesianCameraMixin:
                 frame_center=look_at,
             )
         else:
+            added_anims = list(added_anims)
             self.move_camera(
                 phi=phi,
                 theta=theta,
