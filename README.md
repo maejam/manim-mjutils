@@ -48,7 +48,7 @@ Build a new `VMobject` by applying a Boolean operation (Difference, Exclusion, I
 
 from manim import *
 
-from manim_utils import Stencil
+from manim_mjutils import Stencil
 
 
 class StencilDemo(Scene):
@@ -83,7 +83,7 @@ class StencilDemo(Scene):
         self.wait(1)
 ```  
 
-See the docstrings in `manim_utils.stencil` for more details.  
+See the docstrings in `manim_mjutils.stencil` for more details.  
 
 
 ### Code  
@@ -94,7 +94,7 @@ It provides 2 functions:
 * `highlight_code`: returns an object with 2 attributes, the highlighted lines of code and the background color.
 * `get_styles_list`: returns the list of available `pygments` styles.  
 
-See the docstrings in `manim_utils.code` for more details.  
+See the docstrings in `manim_mjutils.code` for more details.  
 
 
 ### Animations  
@@ -106,7 +106,7 @@ Utilities related to animations.
 ```python
 
 from manim import *
-from manim_utils import LazyAnimation
+from manim_mjutils import LazyAnimation
 
 
 class LazyAnimationDemo(Scene):
@@ -136,7 +136,7 @@ Make sure the Mixin comes before the Animation class in the inheritance tree.
 ```python
 
 from manim import *
-from manim_utils import TrackedAnimationMixin
+from manim_mjutils import TrackedAnimationMixin
 
 
 class TrackedAnimationDemo(Scene):
@@ -191,7 +191,7 @@ It is also possible to pass a callback parameter to a Button that will be called
 from manim import *
 from manim.utils.rate_functions import ease_in_back, ease_out_back
 
-from manim_utils.ui.buttons import PushButton
+from manim_mjutils.ui.buttons import PushButton
 
 
 class PushButtonDemo(Scene):
@@ -250,7 +250,7 @@ class PushButtonDemo(Scene):
 from manim import *
 from manim.utils.rate_functions import ease_in_back, ease_out_back
 
-from manim_utils.ui.buttons import ButtonGroup, HighlightButton, PushButton
+from manim_mjutils.ui.buttons import ButtonGroup, HighlightButton, PushButton
 
 
 class ButtonGroupDemo(Scene):
@@ -301,7 +301,7 @@ A mouse cursor with assets management and auto-fadeout functionality.
 from manim import *
 from manim.utils.rate_functions import ease_in_out_quad
 
-from manim_utils.ui import Cursor
+from manim_mjutils.ui import Cursor
 
 
 class CursorDemo(Scene):
@@ -348,7 +348,7 @@ Simple (V)Mobjects-related utilities.
 ```python
 
 from manim import *
-from manim_utils import IconText
+from manim_mjutils import IconText
 
 
 class IconTextDemo(Scene):
@@ -380,7 +380,7 @@ class IconTextDemo(Scene):
 
 
 from manim import *
-from manim_utils import get_bounds
+from manim_mjutils import get_bounds
 
 
 class GetBoundsDemo(Scene):
@@ -409,7 +409,7 @@ import time
 
 from manim import *
 
-from manim_utils import clip_vmobject
+from manim_mjutils import clip_vmobject
 
 
 class ClipVMobjectDemo(Scene):
