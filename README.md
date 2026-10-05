@@ -1,5 +1,9 @@
 # Manim mjutils – A collection of lightweight manim utilities.
 
+> [!NOTE]
+> This is just an overview of each utility. For a more complete description see the in-code documentation.
+
+
 ## Table of Contents
 
 - [Installation](#installation)
@@ -13,6 +17,7 @@
   - [Mobjects](#mobjects)
   - [Geometry](#geometry)
   - [Typing](#typing)
+  - [3D](#3D)
 
 ---
 
@@ -446,7 +451,7 @@ class ClipVMobjectDemo(Scene):
         print(f"Intersection on text: {t6 - t5:.5f}s")
         print(f"Clipping on text: {t8 - t7:.5f}s")
 
-```
+```  
 
 ### Typing  
 
@@ -469,3 +474,35 @@ Useful to narrow the return type of a function returning conditionally a Group o
 |  Group|VDict      | Mixed unions are unpredictable |
 
 If the `raise_` boolean parameter is ``True`` (default), a runtime check will be perfomed as well and an AssertionError will be raised if the input object is not a Mobject.
+
+
+### 3D  
+
+Helpers for 3D scenes.
+
+* `CartesianCameraMixin`: a Mixin class meant to be used with `ThreeDScene` or a subclass of it. It allows the use of (x, y, z) cartesian coordinates to position the camera.
+
+```python
+from manim import *
+from manim_mjutils import CartesianCameraMixin
+
+
+class CartesianCameraDemo(CartesianCameraMixin, ThreeDScene):
+    def construct(self) -> None:
+        axes = ThreeDAxes()
+        axes.get_x_axis().set_color(RED)
+        axes.get_y_axis().set_color(BLUE)
+        axes.get_z_axis().set_color(GREEN)
+        self.add(axes)
+
+        self.wait()
+
+        # run_time defined => animated
+        self.set_camera_position([5, 5, 5], run_time=2)
+        self.wait()
+
+        # No run_time defined (0 by default) => instant repositioning
+        # No position defined => default goes back to usual 2D view
+        self.set_camera_position()
+        self.wait()
+```  
