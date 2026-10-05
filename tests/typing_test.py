@@ -1,7 +1,7 @@
 import pytest
 from manim import Group, Mobject, VDict, VGroup, VMobject
 
-from manim_utils import GroupDict, V
+from manim_mjutils import GroupDict, V
 
 
 # ----------------------------------------------------------------------

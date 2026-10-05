@@ -4,7 +4,7 @@ import manim as m
 import numpy as np
 import pytest
 
-from manim_utils import CallbackAnimation, LazyAnimation, TrackedAnimationMixin
+from manim_mjutils import CallbackAnimation, LazyAnimation, TrackedAnimationMixin
 
 
 # ----------------------------------------------------------------------

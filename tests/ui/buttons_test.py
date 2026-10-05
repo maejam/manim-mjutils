@@ -2,7 +2,7 @@ import manim as m
 import numpy as np
 import pytest
 
-from manim_utils.ui.buttons import (
+from manim_mjutils.ui.buttons import (
     Button,
     ButtonDict,
     ButtonGroup,

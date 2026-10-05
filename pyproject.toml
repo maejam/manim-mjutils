@@ -1,5 +1,5 @@
 [project]
-name = "manim-utils"
+name = "manim-mjutils"
 version = "0.3.0"
 description = "A collection of manim utilities."
 authors = [
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.entry-points."manim.plugins"]
-manim_utils = "manim_utils.main"
+manim_mjutils = "manim_mjutils.main"
 
 [build-system]
 requires = ["uv_build>=0.9.10,<0.10.0"]

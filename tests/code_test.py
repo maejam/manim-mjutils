@@ -3,7 +3,7 @@ from pathlib import Path
 
 from manim import ManimColor
 
-from manim_utils import highlight_code
+from manim_mjutils import highlight_code
 
 
 # ----------------------------------------------------------------------

@@ -2,7 +2,7 @@ from typing import Any, cast, overload
 
 import manim as m
 
-from manim_utils.mobjects import GroupDict
+from manim_mjutils.mobjects import GroupDict
 
 
 @overload

@@ -377,7 +377,7 @@ wheels = [
 ]
 
 [[package]]
-name = "manim-utils"
+name = "manim-mjutils"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [

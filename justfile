@@ -99,22 +99,19 @@ export PRECOMMIT := '''
     ##### Run all qa tools on added, copied or modified files in the git index #####
     ################################################################################
 
+    # TODO: find an elegant way to exclude files based on the include/exclude
+    # directives in pyproject.toml for each tool. 
+
     files=$(git diff --cached --name-only --diff-filter=ACM | grep ".py$" || true)
+    src_files=$(echo "$files" | grep '^src/' || true)
 
     # Only run those tools on python files
     if [[ -n "$files" ]]; then
         just format $files
-        just check $files
-        # Don't run mypy on tests
-        tocheck=()
-        for file in $files; do
-            if [[ "$file" != tests/* ]]; then
-                tocheck+=("$file")
-            fi
-        done
-        if (( ${#tocheck[@]} != 0 )); then
-            just type ${tocheck[@]}
-        fi
+        # Run ruff linter excluding files in `exclude` table
+        just check $files --force-exclude
+        # Run mypy on src/ files only
+        just type $src_files
     fi
 
     # Run these no matter what

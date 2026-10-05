@@ -1,18 +1,18 @@
-# Manim Utils – A collection of lightweight manim utilities.
+# Manim mjutils – A collection of lightweight manim utilities.
 
 ## Table of Contents
 
 - [Installation](#installation)
 - [Utilities](#utilities)
   - [Stencil](#stencil)
-  - [code](#code)
-  - [animations](#animations)
-  - [ui](#ui)
+  - [Code](#code)
+  - [Animations](#animations)
+  - [UI](#ui)
     - [Buttons](#Buttons)
     - [Cursor](#Cursor)
-  - [mobjects](#mobjects)
-  - [geometry](#geometry)
-  - [typing](#typing)
+  - [Mobjects](#mobjects)
+  - [Geometry](#geometry)
+  - [Typing](#typing)
 
 ---
 
@@ -26,7 +26,7 @@ cd myproject
 ```
 - add the plugin to your newly created or existing project:  
 ```bash
-uv add git+https://github.com/maejam/manim-utils.git
+uv add git+https://github.com/maejam/manim-mjutils.git
 ```
 Requires `Python >= 3.10, < 3.14` and `manim >= 0.19`  
 
@@ -451,20 +451,21 @@ class ClipVMobjectDemo(Scene):
 ### Typing  
 
 * `V`: a simple function used to narrow the type of a Mobject to its vectorized counterpart.
+Useful to narrow the return type of a function returning conditionally a Group or a VGroup for instance.
 
-    input mob           What type checkers will see
-    -----------------------------------------------
-    GroupDict           VDict
-    VDict               VDict
-    GroupDict|VDict     VDict
-    Group               VGroup
-    VGroup              VGroup
-    Group|VGroup        VGroup
-    Mobject             VMobject
-    VMobject            VMobject
-    Mobject|VMobject    VMobject
-    3                   <error>
-    "string"            <error>
-    Group|VDict         Mixed unions are unpredictable
+| input mob         | What type checkers will see    |
+|-------------------|--------------------------------|
+|  GroupDict        | VDict                          |
+|  VDict            | VDict                          |
+|  GroupDict|VDict  | VDict                          |
+|  Group            | VGroup                         |
+|  VGroup           | VGroup                         |
+|  Group|VGroup     | VGroup                         |
+|  Mobject          | VMobject                       |
+|  VMobject         | VMobject                       |
+|  Mobject|VMobject | VMobject                       |
+|  3                | <warning>                      |
+|  "string"         | <warning>                      |
+|  Group|VDict      | Mixed unions are unpredictable |
 
-If the `raise_` boolean parameter is ``True`` (default), a runtime check will be perfomed as well and an AssertionError will be raised if the input object is not a Mobject. Useful to narrow the return type of a function returning a Group|VGroup conditionally for instance.
+If the `raise_` boolean parameter is ``True`` (default), a runtime check will be perfomed as well and an AssertionError will be raised if the input object is not a Mobject.

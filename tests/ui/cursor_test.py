@@ -3,7 +3,7 @@ from unittest.mock import patch
 import manim as m
 import pytest
 
-from manim_utils.ui import Cursor
+from manim_mjutils.ui import Cursor
 
 
 # ----------------------------------------------------------------------

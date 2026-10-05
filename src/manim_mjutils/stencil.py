@@ -4,7 +4,7 @@ from typing import Any
 import manim as m
 from manim.utils.unit import Pixels
 
-from manim_utils import get_bounds
+from manim_mjutils import get_bounds
 
 
 class Stencil(m.VMobject):

@@ -7,7 +7,7 @@ import numpy as np
 from manim.typing import Point3DLike
 from manim.utils.rate_functions import RateFunction
 
-from manim_utils.animations import CallbackAnimation
+from manim_mjutils.animations import CallbackAnimation
 
 
 class Cursor(m.VMobject):
