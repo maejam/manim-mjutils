@@ -62,7 +62,7 @@ def highlight_code(
     font_size: int = ...,
     dedent: bool = ...,
     *,
-    as_list: Literal[True] = ...,
+    as_list: Literal[True],
 ) -> HighlightedCode[list[MarkupText]]: ...
 
 
@@ -77,8 +77,21 @@ def highlight_code(
     font_size: int = ...,
     dedent: bool = ...,
     *,
-    as_list: Literal[False] = ...,
+    as_list: Literal[False],
 ) -> HighlightedCode[MarkupText]: ...
+
+
+@overload
+def highlight_code(
+    code_file: Path | str | None = ...,
+    code_string: str | None = ...,
+    language: str | None = ...,
+    style: str = ...,
+    tab_width: int = ...,
+    font: str = ...,
+    font_size: int = ...,
+    dedent: bool = ...,
+) -> HighlightedCode[list[MarkupText]]: ...
 
 
 def highlight_code(
@@ -198,7 +211,7 @@ def highlight_code(
         )
     else:
         highlighted = pygments.highlight(code_string, lexer, formatter)
-        markup = MarkupText(highlighted)
+        markup = MarkupText(highlighted, font_size=font_size)
         return HighlightedCode[MarkupText](
             markup, ManimColor(formatter.style.background_color)
         )
