@@ -1,5 +1,5 @@
 # The other python versions 'testall' should run on.
-TESTALL_VERSIONS := "3.11 3.12"
+TESTALL_VERSIONS := "3.11 3.12 3.13"
 
 
 set shell := ["uv", "run", "bash", "-euo", "pipefail", "-c"]

@@ -33,7 +33,7 @@ cd myproject
 ```bash
 uv add git+https://github.com/maejam/manim-mjutils.git
 ```
-Requires `Python >= 3.10, < 3.14` and `manim >= 0.19`  
+Requires `Python >= 3.10, < 3.15` and `manim >= 0.19`  
 
 ---
 

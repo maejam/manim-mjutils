@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 license = "GPL-3.0-or-later"
-requires-python = ">=3.11, <3.14"
+requires-python = ">=3.11, <3.15"
 dependencies = [
     "manim>=0.19.0",
     "types-pygments>=2.19.0.20251121",
@@ -39,9 +39,8 @@ testpaths = ["tests"]
 addopts = "-v"
 filterwarnings = [
     "error",
-    "ignore:The '__version__' attribute is deprecated and will be removed in Click 9.1:DeprecationWarning", # cloup
     "ignore:invalid escape sequence:DeprecationWarning", # pydub
-    "ignore:invalid escape sequence:SyntaxWarning", # pydub
+    "ignore:.*invalid escape sequence:SyntaxWarning", # pydub
     "ignore:'audioop' is deprecated and slated for removal:DeprecationWarning", # audioop
 ]
 
