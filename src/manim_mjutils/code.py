@@ -1,11 +1,10 @@
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, Literal, TypeVar, overload
 
 import pygments
-from manim import ManimColor
-from manim.mobject.text.text_mobject import MarkupText
+from manim import ManimColor, MarkupText
 from pygments.formatter import Formatter
 from pygments.formatters import PangoMarkupFormatter
 from pygments.lexer import Lexer
@@ -13,12 +12,14 @@ from pygments.lexers import get_lexer_by_name, guess_lexer, guess_lexer_for_file
 from pygments.styles import get_all_styles
 from pygments.util import html_escape
 
+T = TypeVar("T")
+
 
 @dataclass
-class HighlightedCode:
+class HighlightedCode(Generic[T]):
     """Encapsulate the highlited code and the background color."""
 
-    lines: list[MarkupText]
+    lines: T
     bgcolor: ManimColor
 
 
@@ -50,6 +51,36 @@ class ManimPangoFomatter(PangoMarkupFormatter[str]):
             self.styles[token] = (start, end)
 
 
+@overload
+def highlight_code(
+    code_file: Path | str | None = ...,
+    code_string: str | None = ...,
+    language: str | None = ...,
+    style: str = ...,
+    tab_width: int = ...,
+    font: str = ...,
+    font_size: int = ...,
+    dedent: bool = ...,
+    *,
+    as_list: Literal[True] = ...,
+) -> HighlightedCode[list[MarkupText]]: ...
+
+
+@overload
+def highlight_code(
+    code_file: Path | str | None = ...,
+    code_string: str | None = ...,
+    language: str | None = ...,
+    style: str = ...,
+    tab_width: int = ...,
+    font: str = ...,
+    font_size: int = ...,
+    dedent: bool = ...,
+    *,
+    as_list: Literal[False] = ...,
+) -> HighlightedCode[MarkupText]: ...
+
+
 def highlight_code(
     code_file: Path | str | None = None,
     code_string: str | None = None,
@@ -59,7 +90,9 @@ def highlight_code(
     font: str = "Monospace",
     font_size: int = 22,
     dedent: bool = True,
-) -> HighlightedCode:
+    *,
+    as_list: bool = True,
+) -> HighlightedCode[list[MarkupText]] | HighlightedCode[MarkupText]:
     """Highlight a piece of code with the pygments library.
 
     Parameters
@@ -83,12 +116,15 @@ def highlight_code(
         The size of the font to be used
     dedent
         Whether the code should be dedented or not. Defaults to True.
+    as_list
+        If `True`, a list of MarkupText objects is generated, one per line of code.
+        If `False`, a single MarkupText object is generated.
 
     Returns
     -------
     An instance of :class:`.HighlightedCode`. This instance has 2 attributes:
-    * `lines`: a list of individual code lines as :class:`manim.MarkupText` ready to be
-    rendered.
+    * `lines`: either a list of individual code lines as :class:`manim.MarkupText`
+    (if `as_list` is `True`) or a single `MarkupText` object (if `as_list` is `False`).
     * `bgcolor`: the background color as defined by the chosen style.
 
     Examples
@@ -114,7 +150,7 @@ def highlight_code(
     ...             ),
     ...             code_group,
     ...         )
-    ...         print(code.bgcolor type(code.bgcolor))
+    ...         print(code.bgcolor, type(code.bgcolor))
     #FBF1C7 <class 'manim.utils.color.core.ManimColor'>
 
     Note on performance
@@ -143,21 +179,29 @@ def highlight_code(
         code_string = textwrap.dedent(code_string)
 
     formatter = ManimPangoFomatter(style=style, font=font)
-    highlighted = _highlight_as_pango_lines(code_string, lexer, formatter)
 
-    def prepare_line(line: str) -> MarkupText:
-        # NOTE: add leading dot to preserve indentation when building the MarkupText.
-        # Needs to be done after highlighting to not mess with the lexer
-        dotted = "." + line
-        markup = MarkupText(dotted, font_size=font_size)
-        markup[0].set_opacity(0)
-        return markup
+    if as_list:
+        highlighted_lines = _highlight_as_pango_lines(code_string, lexer, formatter)
 
-    highlighted_code_lines = map(prepare_line, highlighted)
-    return HighlightedCode(
-        list(highlighted_code_lines),
-        ManimColor(formatter.style.background_color),
-    )
+        def prepare_line(line: str) -> MarkupText:
+            # NOTE: add leading dot to preserve indentation when building the MarkupText
+            # Needs to be done after highlighting to not mess with the lexer
+            dotted = "." + line
+            markup = MarkupText(dotted, font_size=font_size)
+            markup[0].set_opacity(0)
+            return markup
+
+        highlighted_code_lines = map(prepare_line, highlighted_lines)
+        return HighlightedCode[list[MarkupText]](
+            list(highlighted_code_lines),
+            ManimColor(formatter.style.background_color),
+        )
+    else:
+        highlighted = pygments.highlight(code_string, lexer, formatter)
+        markup = MarkupText(highlighted)
+        return HighlightedCode[MarkupText](
+            markup, ManimColor(formatter.style.background_color)
+        )
 
 
 def _highlight_as_pango_lines(

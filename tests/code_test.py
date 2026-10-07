@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from manim import ManimColor
+from manim import ManimColor, MarkupText
 
 from manim_mjutils import highlight_code
 
@@ -311,3 +311,13 @@ def test_markup_includes_font_and_color():
         output.lines[0].text
         == '.<tt><spanfgcolor="#000000"font="FiraCode">defhello():</span></tt>'
     )
+
+
+def test_as_list_False_returns_single_MarkupText():
+    code = """
+    a = 42
+    print(a)
+    """
+    output = highlight_code(code_string=code, as_list=False)
+    assert isinstance(output.lines, MarkupText)
+    assert isinstance(output.bgcolor, ManimColor)
