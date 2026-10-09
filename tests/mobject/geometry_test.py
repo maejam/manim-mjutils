@@ -2,7 +2,7 @@ import manim as m
 import numpy as np
 import pytest
 
-from manim_mjutils.geometry import clip_vmobject, get_bounds, is_inside_bounds
+from manim_mjutils import clip_vmobject, get_bounds, is_inside_bounds
 
 
 # ----------------------------------------------------------------------

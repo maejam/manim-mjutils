@@ -4,8 +4,6 @@ from typing import Any
 import manim as m
 from manim.utils.unit import Pixels
 
-from manim_mjutils import get_bounds
-
 
 class Stencil(m.VMobject):
     """A VMobject that represents the Boolean combination of a shape and a clip.
