@@ -8,16 +8,24 @@
 
 - [Installation](#installation)
 - [Utilities](#utilities)
-  - [Stencil](#stencil)
+  - [Mobject](#mobject)
+      - [Stencil](#stencil)
+      - [GroupDict](#groupdict)
+      - [IconText](#icontext)
+      - [VIconText](#vicontext)
+      - [Geometry](#geometry)
   - [Code](#code)
   - [Animations](#animations)
+      - [LazyAnimation](#lazyanimation)
+      - [TrackedAnimationMixin](#trackedanimationmixin)
+      - [CallBackAnimation](#callbackanimation)
   - [UI](#ui)
     - [Buttons](#Buttons)
     - [Cursor](#Cursor)
-  - [Mobjects](#mobjects)
-  - [Geometry](#geometry)
   - [Typing](#typing)
+    - [V](#V)
   - [3D](#3D)
+    - [CartesianCameraMixin](#CartesianCameraMixin)
 
 ---
 
@@ -39,11 +47,12 @@ Requires `Python >= 3.10, < 3.15` and `manim >= 0.19`
 
 ## Utilities
 
-### Stencil
+### Mobject  
+
+#### Stencil  
 
 Build a new `VMobject` by applying a Boolean operation (Difference, Exclusion, Intersection, Union, or a custom callable) to a *shape* and a *clip* object. It also supports an optional *wrapped* object to automatically update the stencil outer geometry to the wrapped Mobject shape and position.
 
-#### Example
 ```python
 
 from manim import *
@@ -86,6 +95,123 @@ class StencilDemo(Scene):
 See the docstrings in `manim_mjutils.stencil` for more details.  
 
 
+#### GroupDict  
+
+Similar to `VDict` for Mobjects. Does not handle displaying keys.
+
+#### IconText  
+ 
+A simple Group combining an icon and a text. Handles svg and raster files to overcome the limitations of manim about svg files. Also, it resizes the raster images using Pillow directly because downsampling with manim `scale` method does not always give good results.
+
+```python
+
+from manim import *
+from manim_mjutils import IconText
+
+
+class IconTextDemo(Scene):
+    def construct(self):
+        icon_text = IconText(Circle(fill_color=RED, fill_opacity=0.2), "Hello")
+        self.add(icon_text)
+
+        custom = IconText(
+            Star(), # SVG/JPG/PNG files also accepted
+            "World",
+            font_size=36,
+            icon_height=0.8,
+            text_color=YELLOW,
+        )
+        self.add(custom.next_to(icon_text, DOWN))
+
+```
+
+#### VIconText  
+
+: similar to `IconText`, but does not accept raster images as icons. Can be used in a vectorized context though, which makes it suitable as a [Button](#Button) content for instance.  
+
+
+#### Geometry  
+
+* `get_bounds`: a function that returns the bounding box of a (groupof) mobject(s). It can include the stroke in the bounding box or not, and has 2 return values conventions based on the `has_len` parameter:
+ - if False (default), it returns 3 3D-points (lower-left, center, upper-right), ideal to perform bounding box computations.
+ - if True, it returns the length of each side of the bounding box + the center point, ideal to build a surrounding rectangle (and much faster than `manim.SurroundingRectangle`).
+
+ ```python
+
+from manim import *
+from manim_mjutils import get_bounds
+
+
+class GetBoundsDemo(Scene):
+    def construct(self):
+        square = Square(side_length=2)
+        d = Dot().shift(LEFT * 2)
+        min_pt, center_pt, max_pt = get_bounds(square)
+        is_left_of_bbox = d.get_x() < min_pt[0]
+        width, height, depth, center = get_bounds(
+            square, as_len=True, include_stroke=True
+        )
+        surrounding = Rectangle(width=width, height=height, color=RED).move_to(center)
+
+        self.add(square, d, surrounding)
+        print(is_left_of_bbox) # True
+
+```  
+
+* `is_inside_bounds`: a function built on top of `get_bounds` to ease checking if a Mobject is inside the bounding box of another/others. The `strict` parameter controls whether the object should be fully inside the bounds or not for the function to return True, and the `include_stroke` parameter controls whether the stroke is part of the target bounding box or not.  
+
+* `clip_vmobject`: a function built on top of the 2 previous functions making it possible to clip a subject vmobject with another. It is mainly meant to be used with composite objects and VGroup. It is a bit slower than `manim.Intersection` for simple shapes but scales much better for composite shapes such as `Text` for instance. Unlike Intersection, it also preserves the style of the subject.
+
+```python
+
+import time
+
+from manim import *
+
+from manim_mjutils import clip_vmobject
+
+
+class ClipVMobjectDemo(Scene):
+    def construct(self) -> None:
+        square = Square()
+        circle = Circle().scale(1.2)
+
+        t1 = time.perf_counter()
+        intersect = Intersection(circle, square)
+        t2 = time.perf_counter()
+        self.add(intersect.shift(LEFT))
+
+        t3 = time.perf_counter()
+        # unlike Intersection, order matters and the style is preserved
+        clip = clip_vmobject(circle, square)
+        t4 = time.perf_counter()
+        self.add(clip.shift(RIGHT))
+
+        txt = Text("abcdefghijklmnopqrstuvwxyx")
+        txt[11].set_fill(BLUE)
+        txt[12].set_fill(RED)
+        txt[13].set_fill(GREEN)
+        txt[14].set_fill(YELLOW)
+        txt[15].set_fill(ORANGE)
+
+        t5 = time.perf_counter()
+        intersect2 = VGroup()
+        intersect2.add(Intersection(letter, square) for letter in txt)
+        t6 = time.perf_counter()
+        self.add(intersect2.shift(UP * 2))
+
+        t7 = time.perf_counter()
+        clip2 = clip_vmobject(txt, square)
+        t8 = time.perf_counter()
+        self.add(clip2.shift(DOWN * 2))
+
+        print(f"Intersection on simple shapes: {t2 - t1:.5f}s")
+        print(f"Clipping on simple shapes: {t4 - t3:.5f}s")
+        print(f"Intersection on text: {t6 - t5:.5f}s")
+        print(f"Clipping on text: {t8 - t7:.5f}s")
+
+---
+
 ### Code  
 
 A set of utilities to manipulate code in your manim scenes. This is designed to be more flexible and lightweight than the manim `Code` Mobject. Can be used with [Paragraph](https://docs.manim.community/en/stable/reference/manim.mobject.text.text_mobject.Paragraph.html), [Table](https://docs.manim.community/en/stable/reference/manim.mobject.table.Table.html) or [manim-grid](https://github.com/maejam/manim-grid) for instance.
@@ -96,12 +222,15 @@ It provides 2 functions:
 
 See the docstrings in `manim_mjutils.code` for more details.  
 
+---
 
 ### Animations  
 
 Utilities related to animations.  
 
-* `LazyAnimation`: an Animation wrapper that builds the animation only when it is played. Useful when the set of mobjects to animate or the animation parameters may change dynamically between the moment the animation is built and the moment it is played.
+#### LazyAnimation
+
+An Animation wrapper that builds the animation only when it is played. Useful when the set of mobjects to animate or the animation parameters may change dynamically between the moment the animation is built and the moment it is played.
 
 ```python
 
@@ -129,7 +258,9 @@ class LazyAnimationDemo(Scene):
 
 ```  
 
-* `TrackedAnimationMixin`: an Mixin class for `Animation` that tracks the status of the animation: "not played", "playing" and "played".
+#### TrackedAnimationMixin
+
+A Mixin class for `Animation` that tracks the status of the animation: "not played", "playing" and "played".
 Make sure the Mixin comes before the Animation class in the inheritance tree.
 
 
@@ -171,9 +302,12 @@ class TrackedAnimationDemo(Scene):
 
 ```  
 
-* `CallBackAnimation`: a wrapper allowing a function call to be performed during an animation.
-Shamelessly stolen for @nikolaj on manim's discord server!
+#### CallBackAnimation
 
+A wrapper allowing a function call to be performed during an animation.
+Shamelessly stolen from @nikolaj on manim's discord server!
+
+---  
 
 ### UI  
 
@@ -336,126 +470,11 @@ class CursorDemo(Scene):
         self.wait()
 ```  
 
-
-### Mobjects  
-
-Simple (V)Mobjects-related utilities.
-
-* `GroupDict`: similar to `VDict` for Mobjects. Does not handle displaying keys.
-
-* `IconText`: A simple Group combining an icon and a text. Handles svg and raster files to overcome the limitations of manim about svg files. Also, it resizes the raster images using Pillow directly because downsampling with manim `scale` method does not always give good results.
-
-```python
-
-from manim import *
-from manim_mjutils import IconText
-
-
-class IconTextDemo(Scene):
-    def construct(self):
-        icon_text = IconText(Circle(fill_color=RED, fill_opacity=0.2), "Hello")
-        self.add(icon_text)
-
-        custom = IconText(
-            Star(), # SVG/JPG/PNG files also accepted
-            "World",
-            font_size=36,
-            icon_height=0.8,
-            text_color=YELLOW,
-        )
-        self.add(custom.next_to(icon_text, DOWN))
-
-```
-
-* `VIconText`: similar to `IconText`, but does not accept raster images as icons. Can be used in a vectorized context though, which makes it suitable as a `Button` content for instance.  
-
-
-### Geometry  
-
-* `get_bounds`: a function that returns the bounding box a (groupof) mobject(s). It can include the stroke in the bounding box or not, and has 2 return values conventions based on the `·has_len` parameter:
- - if False (default), it returns 3 3D-points (lower-left, center, upper-right), ideal to perform bounding box computations.
- - if True, it returns the length of each side of the bounding box + the center point, ideal to build a surrounding rectangle (and much faster than `manim.SurroundingRectangle`).
-
- ```python
-
-
-from manim import *
-from manim_mjutils import get_bounds
-
-
-class GetBoundsDemo(Scene):
-    def construct(self):
-        square = Square(side_length=2)
-        d = Dot().shift(LEFT * 2)
-        min_pt, center_pt, max_pt = get_bounds(square)
-        is_left_of_bbox = d.get_x() < min_pt[0]
-        width, height, depth, center = get_bounds(
-            square, as_len=True, include_stroke=True
-        )
-        surrounding = Rectangle(width=width, height=height, color=RED).move_to(center)
-
-        self.add(square, d, surrounding)
-        print(is_left_of_bbox) # True
-
-```  
-
-* `is_inside_bounds`: a function built on top of `get_bounds` to ease checking if a Mobject is inside the bounding box of another/others. The `strict` parameter controls whether the object should be fully inside the bounds or not for the function to return True, and the `include_stroke` parameter controls whether the stroke is part of the target bounding box or not.  
-
-* `clip_vmobject`: a function built on top of the 2 previous functions making it possible to clip a subject vmobject with another. It is mainly meant to be used with complex objects and VGroup. It is a bit slower than `manim.Intersection` for simple shapes but scales much better for complex shapes such as `Text` for instance. Unlike Intersection, it also preserves the style of the subject.
-
-```python
-
-import time
-
-from manim import *
-
-from manim_mjutils import clip_vmobject
-
-
-class ClipVMobjectDemo(Scene):
-    def construct(self) -> None:
-        square = Square()
-        circle = Circle().scale(1.2)
-
-        t1 = time.perf_counter()
-        intersect = Intersection(circle, square)
-        t2 = time.perf_counter()
-        self.add(intersect.shift(LEFT))
-
-        t3 = time.perf_counter()
-        # unlike Intersection, order matters and the style is preserved
-        clip = clip_vmobject(circle, square)
-        t4 = time.perf_counter()
-        self.add(clip.shift(RIGHT))
-
-        txt = Text("abcdefghijklmnopqrstuvwxyx")
-        txt[11].set_fill(BLUE)
-        txt[12].set_fill(RED)
-        txt[13].set_fill(GREEN)
-        txt[14].set_fill(YELLOW)
-        txt[15].set_fill(ORANGE)
-
-        t5 = time.perf_counter()
-        intersect2 = VGroup()
-        intersect2.add(Intersection(letter, square) for letter in txt)
-        t6 = time.perf_counter()
-        self.add(intersect2.shift(UP * 2))
-
-        t7 = time.perf_counter()
-        clip2 = clip_vmobject(txt, square)
-        t8 = time.perf_counter()
-        self.add(clip2.shift(DOWN * 2))
-
-        print(f"Intersection on simple shapes: {t2 - t1:.5f}s")
-        print(f"Clipping on simple shapes: {t4 - t3:.5f}s")
-        print(f"Intersection on text: {t6 - t5:.5f}s")
-        print(f"Clipping on text: {t8 - t7:.5f}s")
-
-```  
-
 ### Typing  
 
-* `V`: a simple function used to narrow the type of a Mobject to its vectorized counterpart.
+#### V
+
+A simple function used to narrow the type of a Mobject to its vectorized counterpart.
 Useful to narrow the return type of a function returning conditionally a Group or a VGroup for instance.
 
 | input mob         | What type checkers will see    |
@@ -475,12 +494,15 @@ Useful to narrow the return type of a function returning conditionally a Group o
 
 If the `raise_` boolean parameter is ``True`` (default), a runtime check will be perfomed as well and an AssertionError will be raised if the input object is not a Mobject.
 
+---
 
 ### 3D  
 
 Helpers for 3D scenes.
 
-* `CartesianCameraMixin`: a Mixin class meant to be used with `ThreeDScene` or a subclass of it. It allows the use of (x, y, z) cartesian coordinates to position the camera.
+#### CartesianCameraMixin
+
+A Mixin class meant to be used with `ThreeDScene` or a subclass of it. It allows the use of (x, y, z) cartesian coordinates to position the camera.
 
 ```python
 from manim import *
