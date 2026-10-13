@@ -10,5 +10,12 @@ from .mobject.icon_text import IconText as IconText
 from .mobject.icon_text import VIconText as VIconText
 from .mobject.mobject import GroupDict as GroupDict
 from .mobject.stencil import Stencil as Stencil
+from .mobject.text import ALL as ALL
+from .mobject.text import NONE as NONE
+from .mobject.text import Searchable as Searchable
+from .mobject.text import SearchableMarkup as SearchableMarkup
+from .mobject.text import SearchableParagraph as SearchableParagraph
+from .mobject.text import SearchableText as SearchableText
+from .mobject.text import SearchMixin as SearchMixin
 from .threeD import CartesianCameraMixin as CartesianCameraMixin
 from .typing_ import V as V
