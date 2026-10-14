@@ -108,7 +108,7 @@ class SearchMixin:
     original_string
         The complete raw text content before any processing such as adding markup.
     token_spans
-        Predefined token annotations. Each span defines (token_type, lineno,
+        Sequence of predefined token annotations. Each span defines (token_type, lineno,
         char_start, char_end). Accepts a 4-tuple or a TokenSpan instance.
         Defaults to empty sequence (whole text will be annotated as DEFAULT).
     **kwargs
@@ -173,18 +173,25 @@ class SearchMixin:
         Parameters
         ----------
         pattern
-            Regular expression pattern to search for.
+            Regular expression pattern to search for. Default r'.+' matches any
+            character sequence.
         include_tokens
-            Token types to include in results. Use ALL (the default) for any token
-            (including "DEFAULT"), NONE for empty.
+            Token types to include in results. Use ALL (default) for any token
+            (including "DEFAULT"), NONE for no token. It is possible to use wildcard
+            patterns anding with `*` to match all tokens beginning with the same
+            characters. Useful when tokens have a hierarchical structure
+            (e.g. `"Literal*"` will match all `Literal` pygments generated tokens such
+            as `Literal.Number` and `Literal.String`).
         exclude_tokens
             Token types to exclude from results. Same convention as `include_tokens`.
-            Takes precedence over include. Defaults to NONE.
+            Takes precedence over include. Defaults to NONE (no exclusion).
         lines
-            Line numbers to scan. Use int for single line, list/sequence for multiple,
-            slice for ranges, ALL/NONE for universal selection. Defaults to ALL.
-        *regex_flags
-            Flags passed to re.compile (e.g., re.IGNORECASE, re.MULTILINE).
+            Line numbers to scan. Use int for single line, list/sequence for multiple
+            lines, slice for ranges, ALL/NONE for universal selection. Defaults to ALL.
+        lineno_from
+            Line number offset. Defaults to `0`.
+        regex_flags
+            Flags passed to re.compile (e.g. `re.IGNORECASE`, `re.MULTILINE`).
 
         Returns
         -------
@@ -452,37 +459,32 @@ class SearchMixin:
         """Transform the text to prepare it for glyphs lookup.
 
         Subclasses must implement this to convert the raw text string into
-        a line-by-line representation.
+        a line-by-line representation matching the submobject glyphs.
 
         Parameters
         ----------
         original_string
-            Raw text content. It must match the glyph structure or the mapping
-            from character to glyph must be provided in :meth:`_chars_to_glyphs`.
+            Raw text content.
 
         Returns
         -------
-        List of individual lines as strings.
-
-        Raises
-        ------
-        NotImplementedError
-            If subclass fails to override this method.
+        List of individual lines as strings. It must match the glyphs structure or the
+        mapping from character to glyph must be performed in :meth:`_chars_to_glyphs`.
         """
         raise NotImplementedError
 
     def _process_token_spans(
         self, spans: tuple[TokenSpan, ...], original_string: str
     ) -> tuple[TokenSpan, ...]:
-        """Transform the token user-provided token spans if needed."""
+        """Transform the user-provided token spans if needed."""
         return spans
 
     @abstractmethod
     def _chars_to_glyphs(self, lineno: int, char_start: int, char_end: int) -> m.VGroup:
         """Map character positions to glyph submobjects.
 
-        Maps line-relative character indices to the underlying glyph (submobject)
-        collection. Essential for extracting visual representations of matches.
+        Maps line-relative character indices to the underlying glyph submobjects.
+        Essential for extracting visual representations of matches.
 
         Parameters
         ----------
@@ -495,7 +497,7 @@ class SearchMixin:
 
         Returns
         -------
-        VGroup containing glyphs for the specified character range.
+        VGroup containing the glyphs for the specified character range.
         """
         raise NotImplementedError
 
@@ -517,8 +519,9 @@ class SearchableText(SearchMixin, m.Text):
     """A Text subclass with regex and semantic querying.
 
     Extends Text with regex-searching capabilities and token-based filtering.
-    Mutating the glyphs will desynchronize them with the internal string representation
-    and will render subsequent searches brittle.
+
+    Warning: mutating the glyphs will desynchronize them with the internal string
+    representation and will render subsequent searches brittle.
 
     Parameters
     ----------
@@ -600,18 +603,20 @@ class SearchableText(SearchMixin, m.Text):
         """Retrieve glyphs for character range using offset-based indexing.
 
         Computes absolute glyph index from line number and character position
-        then extracts corresponding submobjects.
+        and extracts corresponding submobjects.
         """
         offset = self._line_starts[lineno]
         return cast(m.VGroup, self[offset + char_start : offset + char_end])
 
 
 class SearchableMarkup(SearchMixin, m.MarkupText):
-    """A MarkupText subclass with regex and semantic querying.
+    r"""A MarkupText subclass with regex and semantic querying.
 
     Extends MarkupText with regex-searching capabilities and token-based filtering.
-    Mutating the glyphs will desynchronize them with the internal string representation
-    and will render subsequent searches brittle.
+
+    Warning: mutating the glyphs will desynchronize them with the internal string
+    representation and will render subsequent searches brittle.
+
     Contrary to Text and Paragraph, MarkupText does NOT generate invisible glyphs for
     whitespace characters. Token spans must still be defined including whitespace and
     are normalized during initialization.
@@ -619,7 +624,7 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
     Parameters
     ----------
     markup_text
-        The text including markup to display.
+        The text, including markup, to display.
     original_string
         The string from which the markup was generated. Must not include tags.
     token_spans
@@ -638,6 +643,8 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
     - Some markup tags (e.g. `<u>`) generate extra glyphs that will disalign the
       number of characters and the number of glyphs.
     - Whitespace DO NOT generate invisible Dot glyphs.
+    - Because whitespace characters are removed, some regex tokens will not work as
+      expected (e.g. `\w*` will match accross spaces).
     - Defining token spans manually is possible but not very useful. If the text is
       short, searching capabilities are not very useful; if it is long, defining the
       spans manually is tedious. Parsing libraries such as `pygments` can be used to
@@ -665,7 +672,7 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
         # generate invisible glyphs for whitespace characters.
         # TODO: to support tags generating extra glyphs, one solution would be to check
         # the numbner of points in each glyph: underlines have 20 points, when even a
-        # period has 36.
+        # period has 36. Further investigation needed.
         kwargs.setdefault("disable_ligatures", True)
         super().__init__(
             text=markup_text,
@@ -778,8 +785,9 @@ class SearchableParagraph(SearchMixin, m.Paragraph):
     """A Paragraph subclass with regex and semantic querying.
 
     Extends Paragraph with regex-searching capabilities and token-based filtering.
-    Mutating the glyphs will desynchronize them with the internal string representation
-    and will render subsequent searches brittle.
+
+    Warning: mutating the glyphs will desynchronize them with the internal string
+    representation and will render subsequent searches brittle.
 
     Parameters
     ----------
