@@ -97,6 +97,7 @@ class SearchMixin:
     - Multiple token types can overlap or nest
     - Automatic DEFAULT token computation for unannotated regions
     - Filtering by token inclusion/exclusion parameters
+    - Support for hierarchical tokens and `*` pattern matching
     - Filtering by line numbers (int, list or slice)
 
     Parameters
@@ -382,14 +383,23 @@ class SearchMixin:
 
         assert not isinstance(include, _Quantifier)
         assert not isinstance(exclude, _Quantifier)
-        include = set(include)
-        exclude = set(exclude)
 
-        unknown_i = include.difference(all_tokens)
-        unknown_e = exclude.difference(all_tokens)
-        unknown = unknown_i.union(unknown_e)
-        if unknown:
-            raise ValueError(f"Unknown Token type(s): {unknown!r}")
+        # * pattern matching
+        expanded_include = set(include)
+        for pattern in include:
+            if not pattern.endswith("*"):
+                continue
+            prefix = pattern[:-1]
+            expanded_include.update(t for t in all_tokens if t.startswith(prefix))
+        include = expanded_include
+
+        expanded_exclude = set(exclude)
+        for pattern in exclude:
+            if not pattern.endswith("*"):
+                continue
+            prefix = pattern[:-1]
+            expanded_exclude.update(t for t in all_tokens if t.startswith(prefix))
+        exclude = expanded_exclude
 
         if not include:
             return set()
