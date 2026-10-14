@@ -16,6 +16,8 @@ from .mobject.text import Searchable as Searchable
 from .mobject.text import SearchableMarkup as SearchableMarkup
 from .mobject.text import SearchableParagraph as SearchableParagraph
 from .mobject.text import SearchableText as SearchableText
+from .mobject.text import SearchableVGroup as SearchableVGroup
 from .mobject.text import SearchMixin as SearchMixin
+from .mobject.text import TokenSpan as TokenSpan
 from .threeD import CartesianCameraMixin as CartesianCameraMixin
 from .typing_ import V as V
