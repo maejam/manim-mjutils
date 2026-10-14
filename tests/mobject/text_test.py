@@ -277,13 +277,6 @@ def test_combined_filters(
     assert len(insp.matches()) == expected_matches
 
 
-def test_invalid_tokens_raise(oneline_text):
-    with pytest.raises(ValueError, match="Unknown"):
-        oneline_text.search(include_tokens=["jhjhj"])
-    with pytest.raises(ValueError, match="Unknown"):
-        oneline_text.search(exclude_tokens=["jhjhj"])
-
-
 def test_multiple_occurrences_same_token_type(multiline_text):
     """Verify all occurrences of a token type are returned, not just last one."""
     result = multiline_text.search(include_tokens=["verb"])

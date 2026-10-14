@@ -198,11 +198,6 @@ class SearchMixin:
                     VGroup(...) # 2nd match for token_type1
                 token_type2: ...}
 
-        Raises
-        ------
-        ValueError
-            If include_tokens or exclude_tokens reference unknown token types.
-
         Notes
         -----
         - Overlapping tokens all appear separately in results. This means that the same
