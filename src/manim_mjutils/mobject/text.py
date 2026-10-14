@@ -435,7 +435,7 @@ class SearchMixin:
 
         lines_to_scan = {lineno + lineno_from for lineno in lines_to_scan}
         for lineno in lines_to_scan.copy():
-            if not self._match_lines_filter(lineno, lines):
+            if not self._match_lines_filter(lineno, lines, lineno_from):
                 lines_to_scan.remove(lineno)
 
         return lines_to_scan
@@ -444,6 +444,7 @@ class SearchMixin:
         self,
         lineno: int,
         lines: int | Sequence[int] | slice,
+        lineno_from: int,
     ) -> bool:
         """Check if a line number satisfies the user's line filter specification."""
         if isinstance(lines, int):
@@ -451,7 +452,9 @@ class SearchMixin:
         if isinstance(lines, Sequence):
             return lineno in lines
         if isinstance(lines, slice):
-            return lineno in range(*lines.indices(len(self._original_lines)))
+            return lineno in range(
+                *lines.indices(len(self._original_lines) + lineno_from)
+            )
         return False
 
     @abstractmethod
