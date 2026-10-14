@@ -137,7 +137,7 @@ class SearchMixin:
         self,
         *text: str,
         original_string: str,
-        token_spans: Sequence[TokenSpan] | Sequence[tuple[str, int, int, int]] = (),
+        token_spans: Sequence[TokenSpan | tuple[str, int, int, int]] = (),
         **kwargs: Any,
     ) -> None:
         super().__init__(*text, **kwargs)
@@ -366,8 +366,8 @@ class SearchMixin:
 
     def _get_tokens_to_include(
         self,
-        include: list[str] | tuple[str, ...] | set[str] | _Quantifier = ALL,
-        exclude: list[str] | tuple[str, ...] | set[str] | _Quantifier = NONE,
+        include: list[str] | tuple[str, ...] | set[str] | _Quantifier,
+        exclude: list[str] | tuple[str, ...] | set[str] | _Quantifier,
     ) -> set[str]:
         """Resolve include/exclude lists to final token set for filtering."""
         all_tokens = set(self._token2lines.keys())
