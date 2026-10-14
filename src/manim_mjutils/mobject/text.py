@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any, NamedTuple, Protocol, cast
+from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
 
 import manim as m
 
@@ -65,6 +65,7 @@ class _TokenOccurrence(NamedTuple):
     char_end: int
 
 
+@runtime_checkable
 class Searchable(Protocol):
     """Contract for searchable manim objects."""
 
@@ -74,8 +75,13 @@ class Searchable(Protocol):
         include_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = ALL,
         exclude_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = NONE,
         lines: int | Sequence[int] | slice | _Quantifier = ALL,
+        lineno_from: int = 0,
         regex_flags: Sequence[re.RegexFlag] = (),
-    ) -> m.VGroup: ...
+    ) -> m.VDict: ...
+
+    def get_tokens(self) -> list[str]: ...
+
+    def get_num_lines(self) -> int: ...
 
 
 class SearchMixin:
@@ -144,12 +150,17 @@ class SearchMixin:
         self._token2lines = self._build_token_to_lines_map(self._token_spans)
         self._line2tokens = self._build_line_to_tokens_map(self._token_spans)
 
+    def get_num_lines(self) -> int:
+        """Return the number of lines contained in this Searchable object."""
+        return len(self._original_lines)
+
     def search(
         self,
         pattern: str = r".+",
         include_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = ALL,
         exclude_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = NONE,
         lines: int | Sequence[int] | slice | _Quantifier = ALL,
+        lineno_from: int = 0,
         regex_flags: Sequence[re.RegexFlag] = (),
     ) -> m.VDict:
         """Search for regex patterns with optional token and line filtering.
@@ -206,12 +217,13 @@ class SearchMixin:
         if not tokens_to_include:
             return results
 
-        lines_to_scan = self._get_lines_to_scan(tokens_to_include, lines)
+        lines_to_scan = self._get_lines_to_scan(tokens_to_include, lines, lineno_from)
         if not lines_to_scan:
             return results
 
         for lineno, line in enumerate(self._original_lines):
-            if lineno not in lines_to_scan:
+            global_lineno = lineno + lineno_from
+            if global_lineno not in lines_to_scan:
                 continue
 
             for match in compiled.finditer(line):
@@ -391,11 +403,12 @@ class SearchMixin:
     def _get_lines_to_scan(
         self,
         tokens_to_include: set[str],
-        lines: int | Sequence[int] | slice | _Quantifier = ALL,
+        lines: int | Sequence[int] | slice | _Quantifier,
+        lineno_from: int,
     ) -> set[int]:
         """Pre-compute the set of line numbers to scan during search."""
         if lines == ALL:
-            lines = tuple(range(len(self._original_lines)))
+            lines = tuple(range(lineno_from, len(self._original_lines) + lineno_from))
         if lines == NONE:
             lines = ()
         assert not isinstance(lines, _Quantifier)
@@ -408,6 +421,7 @@ class SearchMixin:
         for token in tokens_to_include:
             lines_to_scan.update(self._token2lines[token])
 
+        lines_to_scan = {lineno + lineno_from for lineno in lines_to_scan}
         for lineno in lines_to_scan.copy():
             if not self._match_lines_filter(lineno, lines):
                 lines_to_scan.remove(lineno)
@@ -836,3 +850,163 @@ class SearchableParagraph(SearchMixin, m.Paragraph):
         Accesses submobjects via line-first indexing (Paragraph structure).
         """
         return cast(m.VGroup, self[lineno][char_start:char_end])
+
+
+class SearchableVGroup(m.VGroup):
+    r"""Container for multiple Searchable objects with unified search capability.
+
+    Aggregates search results from all Searchable submobjects while maintaining
+    global line numbering across the group. Supports recursive nesting
+    (SearchableVGroup containing SearchableVGroup...). Can contain any kind of
+    VMobjects (non-searchable ones will simply be ignored during serach operations).
+    This makes it possible to use it instead of a VGroup with zero overhead.
+
+    Parameters
+    ----------
+    *vmobjects
+        One or more VMobjects to add to the group. Can include Searchable objects
+        (SearchableText, SearchableMarkup, SearchableParagraph) and nested
+        SearchableVGroups. Non-searchable objects are ignored by search().
+    **kwargs
+        Additional keyword arguments forwarded to VGroup.__init__.
+
+    See Also
+    --------
+    SearchableText : Text subclass with regex and semantic querying.
+    SearchableMarkup : MarkupText subclass with regex and semantic querying.
+    SearchableParagraph : Paragraph subclass with regex and semantic querying.
+    SearchMixin : Base mixin providing search functionality to Text-like objects.
+    manim_mjutils.code.highlight_code: function returning a highlighted and searchable
+        piece of code as a SearchableVGroup when `split_lines` is True.
+
+    Examples
+    --------
+    >>> from manim_mjutils import SearchableText, SearchableVGroup
+    >>>
+    >>> # Create multiple searchable text objects
+    >>> line1 = SearchableText("Hello World", token_spans=[("greeting", 0, 0, 5)])
+    >>> line2 = SearchableText("Foo Bar Baz", token_spans=[("word", 0, 0, 3)])
+    >>>
+    >>> # Combine into searchable container
+    >>> group = SearchableVGroup(line1, line2)
+    >>>
+    >>> # Search with global line indexing
+    >>> result = group.search(include_tokens=["DEFAULT"], lines=1)
+    >>> print(result)
+    VDict({'DEFAULT': VGroup(VGroup of 3 submobjects, VGroup of 3 submobjects)})
+
+    """
+
+    def get_num_lines(self) -> int:
+        """Return the number of lines contained in this Searchable object.
+
+        Only Searchable submobjects, including SearchableVGroups, are considered.
+        """
+        return sum(
+            mob.num_lines() for mob in self.submobjects if isinstance(mob, Searchable)
+        )
+
+    def search(
+        self,
+        pattern: str = r".+",
+        include_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = ALL,
+        exclude_tokens: list[str] | tuple[str, ...] | set[str] | _Quantifier = NONE,
+        lines: int | Sequence[int] | slice | _Quantifier = ALL,
+        lineno_from: int = 0,
+        regex_flags: Sequence[re.RegexFlag] = (),
+    ) -> m.VDict:
+        """Search for regex patterns with optional token and line filtering.
+
+        Performs regex matching across all Searchable submobjects using global line
+        numbering. Token results are consolidated by type and returned as a VDict
+        mapping token names to VGroups of matched glyphs with a structure identical
+        to other Searchable mobjects.
+
+        Parameters
+        ----------
+        pattern
+            Regular expression pattern to search for. Default r'.+' matches any
+            character sequence.
+        include_tokens
+            Token types to include in results. Use ALL (default) for any token
+            (including "DEFAULT"), NONE for no token. It is possible to use wildcard
+            patterns anding with `*` to match all tokens beginning with the same
+            characters. Useful when tokens have a hierarchical structure
+            (e.g. `"Literal*"` will match all `Literal` pygments generated tokens such
+            as `Literal.Number` and `Literal.String`).
+        exclude_tokens
+            Token types to exclude from results. Same convention as `include_tokens`.
+            Takes precedence over include. Defaults to NONE (no exclusion).
+        lines
+            Line numbers to scan. Use int for single line, list/sequence for multiple
+            lines, slice for ranges, ALL/NONE for universal selection. Defaults to ALL.
+        lineno_from
+            Line number offset. Defaults to `0`.
+        regex_flags
+            Flags passed to re.compile (e.g. `re.IGNORECASE`, `re.MULTILINE`).
+
+        Returns
+        -------
+        m.VDict
+            Dictionary mapping token types to VGroups of matched glyphs.
+            Structure:
+                {token_type1:
+                    VGroup( # 1st match for token_type1
+                        VGroup(glyphs_for_match1),
+                        VGroup(glyphs_for_match2)),
+                    VGroup(...) # 2nd match for token_type1
+                token_type2: ...}
+
+        Notes
+        -----
+        - Non-Searchable submobjects are skipped without error.
+        - Nested SearchableVGroups work correctly; lineno_from accumulates sibling line
+          counts automatically.
+        - Overlapping tokens all appear separately in results. This means that the same
+          glyph could appear multiple times in different matches. But it will appear
+          only once in the submobjects.
+        - DEFAULT token represents unannotated text regions and can be included/excluded
+          like any other token.
+        """
+        results = m.VDict()
+
+        for mob in self.submobjects:
+            if isinstance(mob, Searchable):
+                res = mob.search(
+                    pattern,
+                    include_tokens,
+                    exclude_tokens,
+                    lines,
+                    lineno_from,
+                    regex_flags,
+                )
+
+                lineno_from += mob.get_num_lines()
+
+                # Consolidate results into a single VDict
+                if res.submobjects:
+                    for key, matches_vg in res.submob_dict.items():
+                        if key not in results:
+                            results[key] = m.VGroup()
+                        for match in matches_vg:
+                            results[key].add(match)
+
+        return results
+
+    def get_tokens(self) -> list[str]:
+        """Return unique token types available in all Searchable submobjects.
+
+        Provides introspection capability to discover all semantic annotations
+        across the entire group.
+
+        Returns
+        -------
+        list[str]
+            Alphabetically sorted list of unique token types. Always includes
+            'DEFAULT' if any unannotated text exists.
+        """
+        tokens = set()
+        for mob in self.submobjects:
+            if isinstance(mob, Searchable):
+                tokens.update(mob.get_tokens())
+        return sorted(tokens)
