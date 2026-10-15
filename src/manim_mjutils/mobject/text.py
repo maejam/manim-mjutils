@@ -621,8 +621,9 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
     representation and will render subsequent searches brittle.
 
     Contrary to Text and Paragraph, MarkupText does NOT generate invisible glyphs for
-    whitespace characters. Token spans must still be defined including whitespace and
-    are normalized during initialization.
+    whitespace characters. To maintain a 1:1 correspondence between characters and
+    glyphs, this class creates invisible characters the same way Text and Paragraph do
+    it.
 
     Parameters
     ----------
@@ -645,9 +646,6 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
       characters and glyphs don't match.
     - Some markup tags (e.g. `<u>`) generate extra glyphs that will disalign the
       number of characters and the number of glyphs.
-    - Whitespace DO NOT generate invisible Dot glyphs.
-    - Because whitespace characters are removed, some regex tokens will not work as
-      expected (e.g. `\w*` will match accross spaces).
     - Defining token spans manually is possible but not very useful. If the text is
       short, searching capabilities are not very useful; if it is long, defining the
       spans manually is tedious. Parsing libraries such as `pygments` can be used to
@@ -688,15 +686,49 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
         """Split text into lines and compute glyph offsets for indexing.
 
         Processes the raw string and establishes character-to-glyph mapping
-        through cumulative offset calculation.
+        through cumulative offset calculation. Injects invisible Dot glyphs
+        for whitespace to achieve 1:1 character-to-glyph correspondence.
         """
+        # NOTE: Injecting Dots makes MarkupText work in a similar fashion to other
+        # classes. It is cleaner and probably more efficient than other solutions:
+        # 1. removing spaces in original_lines and processing token spans to match
+        # problems: regex broken (\w+ matches across spaces) / mismatch string-visual
+        # 2. keeping spaces in original_lines and changing char_to_glyph lookup
+        # problems: slower lookup per search / mismatch string-glyphs
+
         original_lines = original_string.split("\n")
-        original_lines = ["".join(line.split()) for line in original_lines]
-        self._line_starts = [0] + list(
-            itertools.accumulate(len(line) for line in original_lines)
-        )
+
+        glyphs: list[m.VMobject] = []
+        glyph_index = 0
+        line_starts = [0]
+
+        for line in original_lines:
+            line_starts.append(len(line) + line_starts[-1])
+            for char_index, char in enumerate(line):
+                if char.isspace():
+                    space = m.Dot(radius=0, fill_opacity=0, stroke_opacity=0)
+                    if char_index == 0:
+                        # Leading space: position at first glyph of this line
+                        if glyph_index < len(self.submobjects):
+                            space.move_to(self.submobjects[glyph_index].get_center())
+                        else:
+                            # No glyphs on this line: position at origin
+                            space.move_to(self.get_center())
+                    else:
+                        # Middle/end space: position at previous glyph
+                        space.move_to(glyphs[-1].get_center())
+                    glyphs.append(space)
+                else:
+                    # Regular character: take next glyph from submobjects
+                    if glyph_index < len(self.submobjects):
+                        glyphs.append(self.submobjects[glyph_index])
+                        glyph_index += 1
+
+        self.submobjects = glyphs
+        self._line_starts = line_starts
+
         num_glyphs = len(self.submobjects)
-        num_chars = sum([len(line) for line in original_lines])
+        num_chars = sum(len(line) for line in original_lines)
         assert num_chars == num_glyphs, (
             f"The number of glyphs in this {type(self).__name__!r} object "
             f"({num_glyphs!r}) does not match the number of characters in the "
@@ -705,74 +737,6 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
             "glyphs such as `<u>`?"
         )
         return original_lines
-
-    def _process_token_spans(
-        self,
-        spans: tuple[TokenSpan, ...],
-        original_string: str,
-    ) -> tuple[TokenSpan, ...]:
-        """Normalize token spans to match whitespace-stripped glyphs.
-
-        Converts span positions from original text (with whitespace) to positions
-        on the whitespace-stripped text that MarkupText actually renders.
-
-        Notes
-        -----
-        Token boundaries are clamped to the nearest non-whitespace character.
-        """
-        original_lines = original_string.split("\n")
-
-        # Build per-line position maps: line_pos -> stripped_line_pos
-        line_maps: list[dict[int, int]] = []
-        for line in original_lines:
-            char_map: dict[int, int] = {}
-            stripped_pos = 0
-            for i, char in enumerate(line):
-                if not char.isspace():
-                    char_map[i] = stripped_pos
-                    stripped_pos += 1
-            line_maps.append(char_map)
-
-        # Normalize each span
-        normalized: list[TokenSpan] = []
-        for span in spans:
-            token_type, lineno, orig_start, orig_end = span
-
-            # Bounds check
-            if lineno >= len(original_lines):
-                continue
-            if orig_start >= orig_end:
-                continue
-
-            line_length = len(original_lines[lineno])
-            orig_end = min(orig_end, line_length)  # Clamp to line length
-            line_map = line_maps[lineno]
-
-            # Find first non-whitespace in span
-            first_valid = None
-            for i in range(orig_start, orig_end):
-                if i in line_map:
-                    first_valid = i
-                    break
-
-            if first_valid is None:
-                # Span contains only whitespace—skip it
-                continue
-
-            # Find last non-whitespace in span
-            last_valid = first_valid
-            for i in range(orig_end - 1, orig_start - 1, -1):
-                if i in line_map:
-                    last_valid = i
-                    break
-
-            # Map to stripped positions (relative to line)
-            norm_start = line_map[first_valid]
-            norm_end = line_map[last_valid] + 1
-
-            normalized.append(TokenSpan(token_type, lineno, norm_start, norm_end))
-
-        return tuple(normalized)
 
     def _chars_to_glyphs(self, lineno: int, char_start: int, char_end: int) -> m.VGroup:
         """Retrieve glyphs for character range using offset-based indexing.
@@ -908,7 +872,7 @@ class SearchableVGroup(m.VGroup):
     >>>
     >>> # Search with global line indexing
     >>> result = group.search(include_tokens=["DEFAULT"], lines=1)
-    >>> print(result)
+    >>> result
     VDict({'DEFAULT': VGroup(VGroup of 3 submobjects, VGroup of 3 submobjects)})
 
     """
