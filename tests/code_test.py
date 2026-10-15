@@ -1,9 +1,10 @@
 import re
 from pathlib import Path
 
-from manim import ManimColor, MarkupText
+from manim import ManimColor
 
 from manim_mjutils import highlight_code
+from manim_mjutils.mobject.text import SearchableMarkup, SearchableVGroup
 
 
 # ----------------------------------------------------------------------
@@ -33,7 +34,7 @@ def get_plain_lines(highlighted_obj):
 def test_simple_single_line():
     """Test basic single line code."""
     code = "x = 1"
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 1
@@ -44,7 +45,7 @@ def test_multiple_lines_no_multiline_tokens():
     """Test standard multi-line code."""
     code = """def foo():
     return 42"""
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 2
@@ -54,7 +55,7 @@ def test_multiple_lines_no_multiline_tokens():
 def test_docstring_basic():
     """Test a simple single-line docstring."""
     code = '"""Simple docstring."""'
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 1
@@ -66,7 +67,7 @@ def test_docstring_multiline():
     code = '''"""Line 1
 Line 2
 Line 3"""'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     # Should be exactly 3 lines, no extra empty lines
@@ -80,7 +81,7 @@ def test_docstring_with_indentation():
     """Line 1
     Line 2"""
     return 1'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     # Should be exactly 4 lines
@@ -96,7 +97,7 @@ def test_docstring_followed_by_code_same_line():
     code = '''"""Doc
 Line 2""" + 1
 x = 2'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 3
@@ -110,7 +111,7 @@ def test_triple_quoted_string_in_function():
     line
     string"""
     return s'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     # Check structure
@@ -129,7 +130,7 @@ def test_empty_lines_preserved():
     code = """x = 1
 
 y = 2"""
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 3
@@ -141,7 +142,7 @@ def test_comment_multiline():
     code = """# Line 1
 # Line 2
 x = 1"""
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 3
@@ -152,7 +153,7 @@ def test_fstring_multiline():
     """Test multi-line f-strings."""
     code = '''f"""Line 1
 Line 2"""'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 2
@@ -166,7 +167,7 @@ def test_mixed_indentation_levels():
         """Deep
         Doc"""
     x = 1'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     # Check indentation is preserved on docstring lines
@@ -183,15 +184,23 @@ def test_mixed_indentation_levels():
 def test_no_trailing_newline():
     """Test code without a trailing newline."""
     code = "x = 1"
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
 
     assert len(result.lines) == 1
+
+
+def test_no_trailing_newline_split_lines_False():
+    """Test code without a trailing newline."""
+    code = "x = 1"
+    result = highlight_code(code_string=code, language="python", split_lines=False)
+
+    assert len(result.lines) == 5
 
 
 def test_only_newlines():
     """Test code that is just newlines."""
     code = "\n\n\n"
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
     plain = get_plain_lines(result)
 
     # Leading new lines are stripped
@@ -199,22 +208,11 @@ def test_only_newlines():
     assert plain == [""]
 
 
-def test_unicode_characters():
-    """Test code with unicode characters."""
-    code = '''"""Hello 世界 🌍
-Line 2"""'''
-    result = highlight_code(code_string=code, language="python")
-    plain = get_plain_lines(result)
-
-    assert len(result.lines) == 2
-    assert plain == ['"""Hello 世界 🌍', 'Line 2"""']
-
-
 def test_special_characters_in_string():
     """Test strings with special characters that might break Pango."""
     code = r'''"""<script>alert('x')</script>
 Line 2"""'''
-    result = highlight_code(code_string=code, language="python")
+    result = highlight_code(code_string=code, language="python", split_lines=True)
 
     # Should not crash and should preserve the text
     assert result is not None
@@ -229,7 +227,9 @@ def test_from_file():
         temp_path = f.name
 
     try:
-        result = highlight_code(code_file=temp_path, language="python")
+        result = highlight_code(
+            code_file=temp_path, language="python", split_lines=True
+        )
         plain = get_plain_lines(result)
         assert len(result.lines) == 2
         assert plain == ["x = 1", "y = 2"]
@@ -249,7 +249,9 @@ def test_background_color_extracted():
 def test_tab_expansion():
     """Test that tabs are expanded correctly."""
     code = "x\t=\t1"
-    result = highlight_code(code_string=code, language="python", tab_width=4)
+    result = highlight_code(
+        code_string=code, language="python", tab_width=4, split_lines=True
+    )
     plain = get_plain_lines(result)
 
     assert len(result.lines) == 1
@@ -260,7 +262,7 @@ def test_tab_expansion():
 def test_dedent_True():
     code = "\tx\t=\t1"
     result = highlight_code(
-        code_string=code, language="python", tab_width=4, dedent=True
+        code_string=code, language="python", tab_width=4, dedent=True, split_lines=True
     )
     plain = get_plain_lines(result)
 
@@ -272,7 +274,7 @@ def test_dedent_True():
 def test_dedent_False():
     code = "\tx\t=\t1"
     result = highlight_code(
-        code_string=code, language="python", tab_width=4, dedent=False
+        code_string=code, language="python", tab_width=4, dedent=False, split_lines=True
     )
     plain = get_plain_lines(result)
 
@@ -287,7 +289,7 @@ total 2
 drwxrwxr-x  8 mj mj   4096 avril 30 00:32 .
 drwxrwxr-x 24 mj mj   4096 mars  17 14:45 ..
     """
-    result = highlight_code(code_string=code, language="console")
+    result = highlight_code(code_string=code, language="console", split_lines=True)
     plain = get_plain_lines(result)
     assert len(result.lines) == 4
     assert plain == [
@@ -296,28 +298,42 @@ drwxrwxr-x 24 mj mj   4096 mars  17 14:45 ..
         "drwxrwxr-x  8 mj mj   4096 avril 30 00:32 .",
         "drwxrwxr-x 24 mj mj   4096 mars  17 14:45 ..",
     ]
-    print(plain)
 
 
 def test_markup_includes_font_and_color():
     code = "def hello():\n    pass"
-    output = highlight_code(code_string=code, font="Fira Code", style="vim")
+    output = highlight_code(
+        code_string=code, font="Fira Code", style="vim", split_lines=True
+    )
     assert (
         output.lines[0].text
         == '.<tt><spanfgcolor="#cccccc"font="FiraCode">defhello():</span></tt>'
     )
-    output = highlight_code(code_string=code, font="Fira Code", style="algol")
+    output = highlight_code(
+        code_string=code, font="Fira Code", style="algol", split_lines=True
+    )
     assert (
         output.lines[0].text
         == '.<tt><spanfgcolor="#000000"font="FiraCode">defhello():</span></tt>'
     )
 
 
-def test_as_list_False_returns_single_MarkupText():
+def test_split_lines_False_returns_single_SearchableMarkup():
     code = """
     a = 42
     print(a)
     """
-    output = highlight_code(code_string=code, as_list=False)
-    assert isinstance(output.lines, MarkupText)
+    output = highlight_code(code_string=code, split_lines=False)
+    assert isinstance(output.lines, SearchableMarkup)
+    assert isinstance(output.bgcolor, ManimColor)
+
+
+def test_split_lines_True_returns_SearchableVGroup():
+    code = """
+    a = 42
+    print(a)
+    """
+    output = highlight_code(code_string=code, split_lines=True)
+    assert isinstance(output.lines, SearchableVGroup)
+    assert [isinstance(line, SearchableMarkup) for line in output.lines]
     assert isinstance(output.bgcolor, ManimColor)

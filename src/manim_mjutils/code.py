@@ -1,29 +1,99 @@
 import textwrap
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar, overload
+from typing import Any, Generic, Literal, NamedTuple, TypeVar, overload
 
 import pygments
-from manim import ManimColor, MarkupText
+from manim import ManimColor
 from pygments.formatter import Formatter
 from pygments.formatters import PangoMarkupFormatter
 from pygments.lexer import Lexer
 from pygments.lexers import get_lexer_by_name, guess_lexer, guess_lexer_for_filename
 from pygments.styles import get_all_styles
+from pygments.token import _TokenType
 from pygments.util import html_escape
+
+from manim_mjutils.mobject.text import SearchableMarkup, SearchableVGroup, TokenSpan
 
 T = TypeVar("T")
 
 
 @dataclass
 class HighlightedCode(Generic[T]):
-    """Encapsulate the highlited code and the background color."""
+    """Encapsulate the highlighted code and the background color."""
 
     lines: T
     bgcolor: ManimColor
 
 
-class ManimPangoFomatter(PangoMarkupFormatter[str]):
+class _LineToken(NamedTuple):
+    """A pygments token confined to a single line.
+
+    ``char_start`` is relative to the beginning of the line, and ``value`` never
+    contains a newline.
+    """
+
+    token_type: _TokenType
+    char_start: int
+    value: str
+
+
+def _tokenize_by_line(code: str, lexer: Lexer) -> list[list[_LineToken]]:
+    """Tokenize ``code`` and group the tokens by line.
+
+    Tokens spanning several lines are split at newlines. The newline characters
+    themselves are dropped from the values. Offsets are relative to the start of
+    their line.
+    """
+    lines: list[list[_LineToken]] = [[]]
+    line_start = 0
+
+    for abs_start, token_type, value in lexer.get_tokens_unprocessed(code):
+        for chunk in value.splitlines(keepends=True):
+            ends_line = chunk.endswith("\n")
+            if ends_line:
+                chunk = chunk[:-1]
+            lines[-1].append(_LineToken(token_type, abs_start - line_start, chunk))
+            abs_start += len(chunk) + (1 if ends_line else 0)
+            if ends_line:
+                lines.append([])
+                line_start = abs_start
+
+    if len(lines) > 1 and not lines[-1]:
+        # pygments guarantees a trailing newline (option ensurenl), so an
+        # empty trailing line is an artifact of that, not part of the code
+        lines.pop()
+
+    return lines
+
+
+def _format_lines(
+    lines: list[list[_LineToken]], formatter: Formatter[str]
+) -> list[str]:
+    """Render each line's tokens to pango markup."""
+    return [
+        pygments.format([(token.token_type, token.value) for token in line], formatter)
+        for line in lines
+    ]
+
+
+def _spans_for_line(
+    line: list[_LineToken], lineno: int, char_offset: int
+) -> Iterator[TokenSpan]:
+    """Yield spans for the given line, renumbered as local line 0."""
+    for token in line:
+        if not token.value or token.value.isspace():
+            continue
+        yield TokenSpan(
+            token_type=str(token.token_type)[6:],  # remove "Token."
+            lineno=lineno,
+            char_start=token.char_start + char_offset,
+            char_end=token.char_start + len(token.value) + char_offset,
+        )
+
+
+class ManimPangoFormatter(PangoMarkupFormatter[str]):
     def __init__(self, **options: Any) -> None:
         Formatter.__init__(self, **options)
 
@@ -53,6 +123,7 @@ class ManimPangoFomatter(PangoMarkupFormatter[str]):
 
 @overload
 def highlight_code(
+    *,
     code_file: Path | str | None = ...,
     code_string: str | None = ...,
     language: str | None = ...,
@@ -61,13 +132,13 @@ def highlight_code(
     font: str = ...,
     font_size: int = ...,
     dedent: bool = ...,
-    *,
-    as_list: Literal[True],
-) -> HighlightedCode[list[MarkupText]]: ...
+    split_lines: Literal[True],
+) -> HighlightedCode[SearchableVGroup]: ...
 
 
 @overload
 def highlight_code(
+    *,
     code_file: Path | str | None = ...,
     code_string: str | None = ...,
     language: str | None = ...,
@@ -76,13 +147,13 @@ def highlight_code(
     font: str = ...,
     font_size: int = ...,
     dedent: bool = ...,
-    *,
-    as_list: Literal[False],
-) -> HighlightedCode[MarkupText]: ...
+    split_lines: Literal[False],
+) -> HighlightedCode[SearchableMarkup]: ...
 
 
 @overload
 def highlight_code(
+    *,
     code_file: Path | str | None = ...,
     code_string: str | None = ...,
     language: str | None = ...,
@@ -91,10 +162,11 @@ def highlight_code(
     font: str = ...,
     font_size: int = ...,
     dedent: bool = ...,
-) -> HighlightedCode[list[MarkupText]]: ...
+) -> HighlightedCode[SearchableMarkup]: ...
 
 
 def highlight_code(
+    *,
     code_file: Path | str | None = None,
     code_string: str | None = None,
     language: str | None = None,
@@ -103,10 +175,9 @@ def highlight_code(
     font: str = "Monospace",
     font_size: int = 22,
     dedent: bool = True,
-    *,
-    as_list: bool = True,
-) -> HighlightedCode[list[MarkupText]] | HighlightedCode[MarkupText]:
-    """Highlight a piece of code with the pygments library.
+    split_lines: bool = False,
+) -> HighlightedCode[SearchableVGroup] | HighlightedCode[SearchableMarkup]:
+    """Highlight code with the pygments library and make the result searchable.
 
     Parameters
     ----------
@@ -129,42 +200,18 @@ def highlight_code(
         The size of the font to be used
     dedent
         Whether the code should be dedented or not. Defaults to True.
-    as_list
-        If `True`, a list of MarkupText objects is generated, one per line of code.
-        If `False`, a single MarkupText object is generated.
+    split_lines
+        If `True`, a SearchableVGroup of SearchableMarkup objects is generated,
+        one per line of code.
+        If `False` (default), a single `SearchableMarkup` object is generated.
 
     Returns
     -------
     An instance of :class:`.HighlightedCode`. This instance has 2 attributes:
-    * `lines`: either a list of individual code lines as :class:`manim.MarkupText`
-    (if `as_list` is `True`) or a single `MarkupText` object (if `as_list` is `False`).
+    * `lines`: either a SearchableVGroup of individual code lines as
+    :class:`SearchableMarkup` (if `split_lines` is `True`) or a single
+    `SearchableMarkup` object (if `split_lines` is `False`).
     * `bgcolor`: the background color as defined by the chosen style.
-
-    Examples
-    --------
-    >>> import manim as m
-
-    >>> from manim_utils.code import highlight_code
-
-    >>> class CodeHighlighting(m.Scene):
-    ...     def construct(self):
-    ...         code = highlight_code(
-    ...             code_string='''
-    ...         def func():
-    ...             pass
-    ...         ''',
-    ...             language="python",
-    ...             style="gruvbox-light",
-    ...         )
-    ...         code_group = m.VGroup(code.lines).arrange(m.DOWN, aligned_edge=m.LEFT)
-    ...         self.add(
-    ...             m.SurroundingRectangle(code_group).set_fill(
-    ...                 code.bgcolor, opacity=1
-    ...             ),
-    ...             code_group,
-    ...         )
-    ...         print(code.bgcolor, type(code.bgcolor))
-    #FBF1C7 <class 'manim.utils.color.core.ManimColor'>
 
     Note on performance
     --------------------
@@ -191,61 +238,73 @@ def highlight_code(
     if dedent:
         code_string = textwrap.dedent(code_string)
 
-    formatter = ManimPangoFomatter(style=style, font=font)
+    formatter = ManimPangoFormatter(style=style, font=font)
 
-    if as_list:
-        highlighted_lines = _highlight_as_pango_lines(code_string, lexer, formatter)
+    tokenized_lines = _tokenize_by_line(code_string, lexer)
 
-        def prepare_line(line: str) -> MarkupText:
+    if not code_string:
+        tokenized_lines = []
+
+    if split_lines:
+        highlighted_lines = _format_lines(tokenized_lines, formatter)
+
+        # Pop the ensurenl artifact if present
+        if len(tokenized_lines) > 1 and not tokenized_lines[-1]:
+            tokenized_lines.pop()
+
+        def prepare_line(
+            original: str, markup_string: str, tokenized_line: list[_LineToken]
+        ) -> SearchableMarkup:
             # NOTE: add leading dot to preserve indentation when building the MarkupText
             # Needs to be done after highlighting to not mess with the lexer
-            dotted = "." + line
-            markup = MarkupText(dotted, font_size=font_size)
-            markup[0].set_opacity(0)
-            return markup
+            markup_string = "." + markup_string
+            original = "." + original
+            result = SearchableMarkup(
+                markup_text=markup_string,
+                original_string=original,
+                token_spans=list(
+                    _spans_for_line(tokenized_line, lineno=0, char_offset=1)
+                ),
+                font_size=font_size,
+            )
+            result[0].set_opacity(0)
+            return result
 
-        highlighted_code_lines = map(prepare_line, highlighted_lines)
-        return HighlightedCode[list[MarkupText]](
-            list(highlighted_code_lines),
+        if not code_string:
+            searchable_markups = [prepare_line("", "", [])]
+        else:
+            searchable_markups = [
+                prepare_line(orig, highlighted, tokenized)
+                for orig, highlighted, tokenized in zip(
+                    code_string.splitlines(),
+                    highlighted_lines,
+                    tokenized_lines,
+                    strict=True,
+                )
+            ]
+
+        return HighlightedCode[SearchableVGroup](
+            SearchableVGroup(searchable_markups),
             ManimColor(formatter.style.background_color),
         )
+
     else:
-        highlighted = pygments.highlight(code_string, lexer, formatter)
-        markup = MarkupText(highlighted, font_size=font_size)
-        return HighlightedCode[MarkupText](
-            markup, ManimColor(formatter.style.background_color)
+        markup_strings = "\n".join(_format_lines(tokenized_lines, formatter))
+        token_spans = [
+            span
+            for lineno, tokenized_line in enumerate(tokenized_lines)
+            for span in _spans_for_line(tokenized_line, lineno=lineno, char_offset=0)
+        ]
+
+        return HighlightedCode[SearchableMarkup](
+            SearchableMarkup(
+                markup_strings,
+                code_string,
+                token_spans=token_spans,
+                font_size=font_size,
+            ),
+            ManimColor(formatter.style.background_color),
         )
-
-
-def _highlight_as_pango_lines(
-    code: str, lexer: Lexer, formatter: Formatter[str]
-) -> list[str]:
-    # Get all tokens
-    tokens = list(lexer.get_tokens(code))
-
-    # Group tokens by line
-    lines = []
-    current_line_tokens = []
-    for tok_type, tok_text in tokens:
-        for token in tok_text.splitlines(keepends=True):
-            if token.endswith("\n"):
-                current_line_tokens.append((tok_type, token[:-1]))
-                lines.append(current_line_tokens)
-                current_line_tokens = []
-            else:
-                current_line_tokens.append((tok_type, token))
-
-    if current_line_tokens:
-        lines.append(current_line_tokens)
-
-    # Format each line
-    highlighted_lines = []
-    for token_line in lines:
-        markup_line = ""
-        markup_line += pygments.format(token_line, formatter)
-        highlighted_lines.append(markup_line)
-
-    return highlighted_lines
 
 
 def get_styles_list() -> list[str]:
