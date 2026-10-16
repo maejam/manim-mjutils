@@ -351,6 +351,7 @@ def test_regex_flags(multiline_text, flags, expected_matches):
 def test_various_line_counts(original_string, num_lines):
     """Test text with various line counts."""
     text = SearchableText(original_string, token_spans=[])
+    text._lazy_init()
     assert len(text._original_lines) == num_lines
     par = SearchableParagraph(*original_string.splitlines(), token_spans=[])
     assert len(text._original_lines) == num_lines
@@ -359,3 +360,17 @@ def test_various_line_counts(original_string, num_lines):
 def test_kwargs_are_passed_to_parent(oneline_text, paragraph):
     assert oneline_text.color == m.BLUE
     assert paragraph.height == 8
+
+
+def test_mixin_does_not_run_lazy_init_on_creation(oneline_text):
+    assert not oneline_text._cached
+    assert not hasattr(oneline_text, "_token2lines")
+
+
+def test_mixin_runs_lazy_init_once_on_first_call(oneline_text):
+    oneline_text.search()
+    assert oneline_text._cached
+    assert hasattr(oneline_text, "_token2lines")
+    t2l = oneline_text._token2lines
+    oneline_text.search()
+    assert t2l is oneline_text._token2lines

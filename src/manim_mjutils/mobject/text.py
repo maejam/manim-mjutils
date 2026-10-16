@@ -99,6 +99,9 @@ class SearchMixin:
     - Filtering by token inclusion/exclusion parameters
     - Support for hierarchical tokens and `*` pattern matching
     - Filtering by line numbers (int, list or slice)
+    - Lazy initialization allows to use concrete classes in place of their
+      non-searchable counterparts with nearly zero overhead. Most of the computation
+      is done when using the search specific methods.
 
     Parameters
     ----------
@@ -141,18 +144,27 @@ class SearchMixin:
         **kwargs: Any,
     ) -> None:
         super().__init__(*text, **kwargs)
-        self._original_lines = self._process_original_string(original_string)
+        self._original_string = original_string
 
-        spans = tuple(TokenSpan(*span) for span in token_spans)
-        spans = self._process_token_spans(spans, original_string)
+        # process lines here to establish char/glyph correspndence
+        self._original_lines = self._process_original_string(self._original_string)
+        self._token_spans = token_spans
+        self._cached = False
+
+    def _lazy_init(self) -> None:
+        spans = tuple(TokenSpan(*span) for span in self._token_spans)
+        spans = self._process_token_spans(spans, self._original_string)
         default_spans = self._compute_default_token_spans(spans, self._original_lines)
         self._token_spans = spans + tuple(default_spans)
 
         self._token2lines = self._build_token_to_lines_map(self._token_spans)
         self._line2tokens = self._build_line_to_tokens_map(self._token_spans)
+        self._cached = True
 
     def get_num_lines(self) -> int:
         """Return the number of lines contained in this Searchable object."""
+        if not self._cached:
+            self._lazy_init()
         return len(self._original_lines)
 
     def search(
@@ -213,6 +225,9 @@ class SearchMixin:
         - DEFAULT token represents unannotated text regions and can be included/excluded
           like any other token.
         """
+        if not self._cached:
+            self._lazy_init()
+
         compiled = re.compile(pattern, *regex_flags)
         results = m.VDict()
 
@@ -515,6 +530,9 @@ class SearchMixin:
         Alphabetically sorted list of unique token types.
         Always includes DEFAULT_TOKEN if any unannotated text exists.
         """
+        if not self._cached:
+            self._lazy_init()
+
         return sorted({*self._token2lines.keys()})
 
 
