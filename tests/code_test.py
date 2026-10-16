@@ -186,7 +186,8 @@ def test_no_trailing_newline():
     code = "x = 1"
     result = highlight_code(code_string=code, language="python", split_lines=True)
 
-    assert len(result.lines) == 1
+    assert len(result.lines) == 1  # SearchableGroup of 1 line
+    assert result.lines.get_num_lines() == 1
 
 
 def test_no_trailing_newline_split_lines_False():
@@ -194,7 +195,8 @@ def test_no_trailing_newline_split_lines_False():
     code = "x = 1"
     result = highlight_code(code_string=code, language="python", split_lines=False)
 
-    assert len(result.lines) == 5
+    assert len(result.lines) == 5  # SearchableMarkup of 5 chars
+    assert result.lines.get_num_lines() == 1
 
 
 def test_only_newlines():
