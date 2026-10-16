@@ -112,30 +112,30 @@ from manim_mjutils import IconText
 
 class IconTextDemo(Scene):
     def construct(self):
-        icon_text = IconText(Circle(fill_color=RED, fill_opacity=0.2), "Hello")
+        hello = IconText(Circle(fill_color=RED, fill_opacity=0.2), "Hello")
         self.add(icon_text)
 
-        custom = IconText(
+        world = IconText(
             Star(), # SVG/JPG/PNG files also accepted
             "World",
             font_size=36,
             icon_height=0.8,
             text_color=YELLOW,
         )
-        self.add(custom.next_to(icon_text, DOWN))
+        self.add(world.next_to(hello, DOWN))
 
 ```
 
 #### VIconText  
 
-: similar to `IconText`, but does not accept raster images as icons. Can be used in a vectorized context though, which makes it suitable as a [Button](#Button) content for instance.  
+Similar to `IconText`, but does not accept raster images as icons. Can be used in a vectorized context though, which makes it suitable as a [Button](#Buttons) content for instance.  
 
 
 #### Geometry  
 
-* `get_bounds`: a function that returns the bounding box of a (groupof) mobject(s). It can include the stroke in the bounding box or not, and has 2 return values conventions based on the `has_len` parameter:
- - if False (default), it returns 3 3D-points (lower-left, center, upper-right), ideal to perform bounding box computations.
- - if True, it returns the length of each side of the bounding box + the center point, ideal to build a surrounding rectangle (and much faster than `manim.SurroundingRectangle`).
+* `get_bounds`: a function that returns the bounding box of a (group of) mobject(s). It can include the stroke in the bounding box or not, and has 2 return values conventions based on the `as_len` parameter:
+    - if False (default), it returns 3 3D-points (lower-left, center, upper-right), ideal to perform bounding box computations.
+    - if True, it returns the length of each side of the bounding box + the center point, ideal to build a surrounding rectangle (and much faster than `manim.SurroundingRectangle`).
 
  ```python
 
@@ -210,6 +210,8 @@ class ClipVMobjectDemo(Scene):
         print(f"Clipping on simple shapes: {t4 - t3:.5f}s")
         print(f"Intersection on text: {t6 - t5:.5f}s")
         print(f"Clipping on text: {t8 - t7:.5f}s")
+
+```
 
 
 #### Text  
@@ -481,7 +483,7 @@ class ButtonGroupDemo(Scene):
 
 ```
 
-* `ButtonDict`: a VGroup of Buttons with a group level callback function and string labels access.  
+* `ButtonDict`: a group of Buttons with a group level callback function and string labels access.  
 
 
 #### Cursor  
