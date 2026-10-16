@@ -548,8 +548,8 @@ Useful to narrow the return type of a function returning conditionally a Group o
 |  Mobject          | VMobject                       |
 |  VMobject         | VMobject                       |
 |  Mobject|VMobject | VMobject                       |
-|  3                | <warning>                      |
-|  "string"         | <warning>                      |
+|  3                | -warning-                      |
+|  "string"         | -warning-                      |
 |  Group|VDict      | Mixed unions are unpredictable |
 
 If the `raise_` boolean parameter is ``True`` (default), a runtime check will be perfomed as well and an AssertionError will be raised if the input object is not a Mobject.
