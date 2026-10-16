@@ -14,6 +14,7 @@
       - [IconText](#icontext)
       - [VIconText](#vicontext)
       - [Geometry](#geometry)
+      - [Text](#text)
   - [Code](#code)
   - [Animations](#animations)
       - [LazyAnimation](#lazyanimation)
@@ -210,14 +211,71 @@ class ClipVMobjectDemo(Scene):
         print(f"Intersection on text: {t6 - t5:.5f}s")
         print(f"Clipping on text: {t8 - t7:.5f}s")
 
+
+#### Text  
+
+Utilities for Text-like mobjects.
+
+* `SearchableText`: A Text subclass with regex and semantic querying.
+* `SearchableMarkup`: A MarkupText subclass with regex and semantic querying.
+* `SearchableParagraph`: A Paragraph subclass with regex and semantic querying.
+* `SearchableVGroup`: A VGroup subclass delegating search operations to its member searchable mobjects. It can contain any VMobject, non-searchable ones will simply be ignored.
+
+See the doctrings in `manim_mjutils.mobject.text` for more details.
+See the example for [highlight_code](#code) below.
+
 ---
 
 ### Code  
 
-A set of utilities to manipulate code in your manim scenes. This is designed to be more flexible and lightweight than the manim `Code` Mobject. Can be used with [Paragraph](https://docs.manim.community/en/stable/reference/manim.mobject.text.text_mobject.Paragraph.html), [Table](https://docs.manim.community/en/stable/reference/manim.mobject.table.Table.html) or [manim-grid](https://github.com/maejam/manim-grid) for instance.
+A set of utilities to manipulate code in your manim scenes. This is designed to be more flexible and lightweight than the manim `Code` Mobject.
 
 It provides 2 functions:
-* `highlight_code`: returns an object with 2 attributes, the highlighted lines of code and the background color.
+* `highlight_code`: returns an object with 2 attributes, the highlighted lines of code and the background color. The lines can be retuned as one [SearchableMarkup](#text) object or as a [SearchableVGroup](#text) of SearchableMarkup objects (one per line).
+
+```python
+import re
+from manim import *
+from manim_mjutils import highlight_code
+
+class CodeHighlightingDemo(Scene):
+    def construct(self):
+        code_str = '''
+        class HighlightedClass: # line filtered out
+            def highlight_method(self) -> None: ...
+
+        # Highlight comment - token excluded
+        def highlighted_func():
+            """Multiline docstring.
+
+            With HIGHLIGHTING.
+            """
+        '''
+        code = highlight_code(
+            code_string=code_str,
+            language="python",
+            style="gruvbox-dark",
+            split_lines=False,
+        )
+        self.add(
+            SurroundingRectangle(code.lines).set_fill(code.bgcolor, opacity=1),
+            code.lines,
+        )
+        matches = code.lines.search(
+            r"highlight\w+",  # regex pattern
+            exclude_tokens=[
+                "Comment*"
+            ],  # tokens to include/exclude - support '*' wildcard
+            lines=slice(1, None, None),  # line filter - int | list | slice
+            regex_flags=[re.IGNORECASE],
+        )
+        self.play(Indicate(matches))
+        print(matches)
+        # VDict({'Name.Function': VGroup(VGroup of 16 submobjects, VGroup of 16 submobjects), 'Literal.String.Doc': VGroup(VGroup of 12 submobjects)})
+        # VDict: {token_name: VGroup(match1 glyphs, match2 glyphs), ...}
+
+```
+
 * `get_styles_list`: returns the list of available `pygments` styles.  
 
 See the docstrings in `manim_mjutils.code` for more details.  
