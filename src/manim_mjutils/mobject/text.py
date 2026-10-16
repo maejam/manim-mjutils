@@ -535,6 +535,13 @@ class SearchMixin:
 
         return sorted({*self._token2lines.keys()})
 
+    def __repr__(self) -> str:
+        wrap_len = 40
+        return (
+            f"{type(self).__name__}('{self._original_string[:wrap_len]}"
+            f"{'[...]' if len(self._original_string) > wrap_len else ''}')"
+        )
+
 
 class SearchableText(SearchMixin, m.Text):
     """A Text subclass with regex and semantic querying.
@@ -851,7 +858,7 @@ class SearchableParagraph(SearchMixin, m.Paragraph):
 
 
 class SearchableVGroup(m.VGroup):
-    r"""Container for multiple Searchable objects with unified search capability.
+    """Container for multiple Searchable objects with unified search capability.
 
     Aggregates search results from all Searchable submobjects while maintaining
     global line numbering across the group. Supports recursive nesting
@@ -901,7 +908,9 @@ class SearchableVGroup(m.VGroup):
         Only Searchable submobjects, including SearchableVGroups, are considered.
         """
         return sum(
-            mob.num_lines() for mob in self.submobjects if isinstance(mob, Searchable)
+            mob.get_num_lines()
+            for mob in self.submobjects
+            if isinstance(mob, Searchable)
         )
 
     def search(
@@ -945,7 +954,7 @@ class SearchableVGroup(m.VGroup):
 
         Returns
         -------
-        m.VDict
+        VDict
             Dictionary mapping token types to VGroups of matched glyphs.
             Structure:
                 {token_type1:
