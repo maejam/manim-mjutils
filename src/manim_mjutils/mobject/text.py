@@ -211,10 +211,9 @@ class SearchMixin:
             Dictionary mapping token types to VGroups of matched glyphs.
             Structure:
                 {token_type1:
-                    VGroup( # 1st match for token_type1
+                    VGroup( # matches for token_type1
                         VGroup(glyphs_for_match1),
                         VGroup(glyphs_for_match2)),
-                    VGroup(...) # 2nd match for token_type1
                 token_type2: ...}
 
         Notes
@@ -958,10 +957,9 @@ class SearchableVGroup(m.VGroup):
             Dictionary mapping token types to VGroups of matched glyphs.
             Structure:
                 {token_type1:
-                    VGroup( # 1st match for token_type1
+                    VGroup( # matches for token_type1
                         VGroup(glyphs_for_match1),
                         VGroup(glyphs_for_match2)),
-                    VGroup(...) # 2nd match for token_type1
                 token_type2: ...}
 
         Notes
