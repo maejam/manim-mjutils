@@ -4,7 +4,7 @@ from pathlib import Path
 from manim import ManimColor
 
 from manim_mjutils import highlight_code
-from manim_mjutils.mobject.text import SearchableMarkup, SearchableVGroup
+from manim_mjutils.mobject.text.searchable import SearchableMarkup, SearchableVGroup
 
 
 # ----------------------------------------------------------------------

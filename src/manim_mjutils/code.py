@@ -14,7 +14,11 @@ from pygments.styles import get_all_styles
 from pygments.token import _TokenType
 from pygments.util import html_escape
 
-from manim_mjutils.mobject.text import SearchableMarkup, SearchableVGroup, TokenSpan
+from manim_mjutils.mobject.text.searchable import (
+    SearchableMarkup,
+    SearchableVGroup,
+    TokenSpan,
+)
 
 T = TypeVar("T")
 

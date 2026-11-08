@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from manim_mjutils import SearchableText
-from manim_mjutils.mobject.text import (
+from manim_mjutils.mobject.text.searchable import (
     ALL,
     NONE,
     SearchableMarkup,
