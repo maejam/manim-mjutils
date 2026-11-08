@@ -367,6 +367,13 @@ class TrackedAnimationDemo(Scene):
 A wrapper allowing a function call to be performed during an animation.
 Shamelessly stolen from @nikolaj on manim's discord server!
 
+```  
+
+#### Shatter
+
+An Animation that disperses a mobject's family members into independent pieces that fly radially outward, spin, and fade. Pieces are removed from the scene on cleanup (if remover is True).
+Supports dispersion distance, rotation amplitude, fade toggle and a seed for reproducible renders.
+
 ---  
 
 ### UI  

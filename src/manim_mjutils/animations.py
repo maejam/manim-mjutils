@@ -1,7 +1,11 @@
+from __future__ import annotations
+
+import random
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, cast
 
 import manim as m
+import numpy as np
 
 
 class LazyAnimation(m.Animation):
@@ -212,3 +216,122 @@ class CallbackAnimation(m.Animation):
         if not self._called and alpha >= self._delay:
             self._callback(*self._args)
             self._called = True
+
+
+class Shatter(m.Animation):
+    """Explode a mobject into its constituent family members.
+
+    Every visible family member becomes an independent fragment that flies radially
+    outward from the mobject's center, spins, and fades.
+
+    Parameters
+    ----------
+    mobject
+        The mobject to shatter. Every family member carrying geometry (i.e. every
+        element of ``family_members_with_points()``) becomes an independent fragment.
+    dispersion_factor
+        Multiplier for the maximum fragment travel distance, relative to the distance
+        between the explosion center and the farthest fragment's initial position.
+        Higher values throw pieces farther. Defaults to ``6.0``.
+    rotation_amplitude
+        Maximum rotation (in radians) any single fragment accumulates over the
+        animation. Each fragment receives a random angle. Defaults to ``PI / 3``.
+    fade
+        Whether fragments fade to zero opacity over the course of the animation.
+        If ``False``, fragments end fully visible and are removed from the scene only
+        per ``remover``. Defaults to ``True``.
+    seed
+        Seed for the random dispersal (direction jitter and per-fragment rotation).
+        ``None`` produces different randomness on every run; pass a fixed integer for
+        reproducible renders. Defaults to ``None``.
+    remover
+        Passed to the parent :class:`~.Animation`. With the default ``True``, the
+        mobject and all its family memebers are removed from the scene on cleanup.
+    **kwargs
+        Forwarded to the parent :class:`~.Animation` constructor (``run_time``,
+        ``rate_func``, ...).
+
+    Examples
+    --------
+    self.play(Shatter(mob, seed=42), rate_func=rush_from)
+
+    """
+
+    def __init__(
+        self,
+        mobject: m.VMobject,
+        dispersion_factor: float = 6.0,
+        rotation_amplitude: float = m.PI / 3,
+        fade: bool = True,
+        seed: int | None = None,
+        remover: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        self.dispersion_factor = dispersion_factor
+        self.rotation_amplitude = rotation_amplitude
+        self.fade = fade
+        self.seed = seed
+        super().__init__(mobject, remover=remover, **kwargs)
+
+    def begin(self) -> None:
+        rng = random.Random(self.seed)
+        center = self.mobject.get_center()
+
+        self._pieces = cast(list[m.VMobject], self.mobject.family_members_with_points())
+        if not self._pieces:
+            raise ValueError("Nothing to shatter: no family member with points.")
+
+        self._starts = [p.get_center() for p in self._pieces]
+        self._directions = []
+        self._angles = []
+        self._opacities = []
+
+        for piece, start in zip(self._pieces, self._starts, strict=True):
+            radial = start - center
+            if np.linalg.norm(radial) < 1e-6:  # piece sits at the center
+                radial = np.array([rng.uniform(-1, 1), rng.uniform(-1, 1), 0.0])
+            direction = radial / np.linalg.norm(radial)
+            # slight angular jitter so perfect symmetry doesn't look fake
+            jitter = rng.uniform(-0.25, 0.25)
+            cos, sin = np.cos(jitter), np.sin(jitter)
+            direction = np.array(
+                [
+                    direction[0] * cos - direction[1] * sin,
+                    direction[0] * sin + direction[1] * cos,
+                    0.0,
+                ],
+            )
+            self._directions.append(direction)
+            self._angles.append(
+                rng.uniform(-self.rotation_amplitude, self.rotation_amplitude)
+            )
+            self._opacities.append(
+                (piece.get_fill_opacity(), piece.get_stroke_opacity())
+            )
+
+        # Total travel distance, scaled to the mobject's size
+        self._travel = self.dispersion_factor * max(
+            np.linalg.norm(start - center) for start in self._starts
+        )
+
+        self._prev_alpha = 0.0
+        super().begin()
+
+    def interpolate(self, alpha: float) -> None:
+        super().interpolate(alpha)
+        d_alpha = alpha - self._prev_alpha
+        self._prev_alpha = alpha
+
+        for piece, direction, angle, (fill_opacity, stroke_opacity) in zip(
+            self._pieces,
+            self._directions,
+            self._angles,
+            self._opacities,
+            strict=True,
+        ):
+            piece.shift(direction * self._travel * d_alpha)
+            if d_alpha != 0:
+                piece.rotate(angle * d_alpha, about_point=piece.get_center())
+            if self.fade:
+                piece.set_fill(opacity=fill_opacity * (1 - alpha))
+                piece.set_stroke(opacity=stroke_opacity * (1 - alpha))
