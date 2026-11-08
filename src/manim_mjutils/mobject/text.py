@@ -1,12 +1,23 @@
+from __future__ import annotations
+
 import itertools
 import re
-from abc import abstractmethod
+from abc import ABC, abstractmethod
+from bisect import bisect_right
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Generator, Hashable, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from enum import Enum
-from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
+from typing import (
+    Any,
+    NamedTuple,
+    Protocol,
+    cast,
+    runtime_checkable,
+)
 
 import manim as m
+from manim.typing import Vector3DLike
 
 
 class _Quantifier(Enum):
@@ -65,6 +76,82 @@ class _TokenOccurrence(NamedTuple):
     char_end: int
 
 
+class SearchResult(m.VDict):
+    """VDict returned by ``search``, with convenience accessors.
+
+    A VDict with accessors to specific matches and methods for chaining searching and
+    mutating.
+
+    Parameters
+    ----------
+    source
+        The Searchable Mobject this result originates from.
+    mapping
+        Dictionary mapping token types to VGroups of matched glyphs.
+        Structure:
+            {token_type1:
+                VGroup( # matches for token_type1
+                    VGroup(glyphs_for_match1),
+                    VGroup(glyphs_for_match2)),
+            token_type2: ...}
+
+    """
+
+    def __init__(
+        self,
+        source: Searchable,
+        mapping: Mapping[Hashable, m.VMobject] | None = None,
+    ) -> None:
+        super().__init__(mapping if mapping is not None else {})
+        self._source = source
+
+    def first(self) -> m.VGroup:
+        """Glyphs of the first match.
+
+        Raises ValueError if there are no matches.
+        """
+        for match_group in self.submob_dict.values():
+            if match_group:
+                return cast(m.VGroup, match_group[0])
+        raise ValueError("Search produced no matches.")
+
+    def mutate_first(
+        self,
+        new_text: str,
+        style_overrides: dict[str, Any] | None = None,
+        font: str | None = None,
+        font_size: float | None = None,
+        align: Vector3DLike = m.LEFT,
+    ) -> AbstractContextManager[m.VDict]:
+        """Mutate the first match via the source object's ``mutate``.
+
+        Examples
+        --------
+        from manim import *
+
+        from manim_mjutils import SearchableText
+
+
+        class MutateDemo(Scene):
+            def construct(self) -> None:
+                text = SearchableText("Hello World")
+                self.add(text)
+                self.wait()
+                with text.search(r"Hello").mutate_first("Goodbye") as line:
+                    self.play(
+                        line["tail"].animate.shift(
+                            RIGHT * (line["new"].width - line["old"].width)
+                        )
+                    )
+                    self.play(Transform(line["old"], line["new"]))
+                self.wait()
+
+        """
+        return self._source.mutate(
+            self.first(), new_text, style_overrides, font, font_size, align
+        )
+
+
 @runtime_checkable
 class Searchable(Protocol):
     """Contract for searchable manim objects."""
@@ -79,12 +166,22 @@ class Searchable(Protocol):
         regex_flags: Sequence[re.RegexFlag] = (),
     ) -> m.VDict: ...
 
+    def mutate(
+        self,
+        glyphs: m.VGroup,
+        new_text: str = "",
+        style_overrides: dict[str, Any] | None = None,
+        font: str | None = None,
+        font_size: float | None = None,
+        align: Vector3DLike = m.LEFT,
+    ) -> AbstractContextManager[m.VDict]: ...
+
     def get_tokens(self) -> list[str]: ...
 
     def get_num_lines(self) -> int: ...
 
 
-class SearchMixin:
+class SearchMixin(ABC):
     """Mixin for Text-like objects adding support for regex and semantic querying.
 
     Enables semantic-aware searching by combining standard regex matching with
@@ -143,6 +240,8 @@ class SearchMixin:
         token_spans: Sequence[TokenSpan | tuple[str, int, int, int]] = (),
         **kwargs: Any,
     ) -> None:
+        self._font = kwargs.get("font", "")
+        self._font_size = kwargs.get("font_size", m.DEFAULT_FONT_SIZE)
         super().__init__(*text, **kwargs)
         self._original_string = original_string
 
@@ -175,7 +274,7 @@ class SearchMixin:
         lines: int | Sequence[int] | slice | _Quantifier = ALL,
         lineno_from: int = 0,
         regex_flags: Sequence[re.RegexFlag] = (),
-    ) -> m.VDict:
+    ) -> SearchResult:
         """Search for regex patterns with optional token and line filtering.
 
         Performs regex matching on the text, returning glyphs grouped by token type
@@ -207,7 +306,7 @@ class SearchMixin:
 
         Returns
         -------
-        VDict
+        SearchResult
             Dictionary mapping token types to VGroups of matched glyphs.
             Structure:
                 {token_type1:
@@ -228,7 +327,7 @@ class SearchMixin:
             self._lazy_init()
 
         compiled = re.compile(pattern, *regex_flags)
-        results = m.VDict()
+        results = SearchResult(self)
 
         tokens_to_include = self._get_tokens_to_include(include_tokens, exclude_tokens)
         if not tokens_to_include:
@@ -260,6 +359,134 @@ class SearchMixin:
                     results[token_type].add(glyphs)
 
         return results
+
+    @contextmanager
+    def mutate(
+        self,
+        glyphs: m.VGroup,
+        new_text: str = "",
+        style_overrides: dict[str, Any] | None = None,
+        font: str | None = None,
+        font_size: float | None = None,
+        align: Vector3DLike = m.LEFT,
+    ) -> Generator[m.VDict]:
+        """Replace ``glyphs`` in the submobjects keeping the characters consistent.
+
+        WARNING: experimental functionality. Could leave the Searchable Mobject in an
+        inconsistent state. In particular the token spans are NOT updated, which means
+        a subsequent search could yield multiple matches where only one would be
+        expected.
+
+        The glyphs to replace MUST be contiguous and on the same line. The first glyph
+        is used to match the full sequence and to determine the styling for the new
+        glyphs.
+
+        The original glyphs are removed from the original object and the new ones are
+        added only after exiting the context manager to allow for greater control over
+        transition animations.
+
+        Parameters
+        ----------
+        glyphs
+            The glyphs to replace. ``ValueError`` will be raised if they cannot be
+            found in the submobjects.
+        new_text
+            The text by which to replace the glyphs. A `Text` object will be created
+            (matching the first glyph style) from which SVGMobjects will be extracted
+            to replace the original glyphs.
+        style_overrides
+            Optional key/Value pairs that can be used to override any style attribute
+            from the original glyphs.
+        font
+            The font for the new piece of text. If `None` (default), the original text
+            font is used.
+        font_size
+            The font size for the new piece of text. If `None` (default), the original
+            text font size is used.
+        align
+            The alignment for the new glyphs with respect to the first old glyph.
+            Can be used to adjust the baseline for instance.
+
+        Yields
+        ------
+        A VDict containing 4 VGroups:
+         - "head": the glyphs that come before the mutated ones on the targeted line.
+         - "old": the replaced glyphs.
+         - "new": the new glyphs after mutation.
+         - "tail": the glyphs that come after the mutated ones on the targeted line.
+        This shape allows to easily animate the glyphs before/after the new ones in case
+        their width is different from the ones they replace.
+
+        Examples
+        --------
+        from manim import *
+
+        from manim_mjutils import SearchableText
+
+
+        class MutateDemo(Scene):
+            def construct(self) -> None:
+                text = SearchableText("Hello World")
+                self.add(text)
+                result = text.search(r"Hello")
+                glyphs = result.first()
+                self.wait()
+                with text.mutate(glyphs, "Goodbye", align=UL) as line:
+                    self.play(
+                        line["tail"].animate.shift(
+                            RIGHT * (line["new"].width - glyphs.width)
+                        )
+                    )
+                    self.play(Transform(glyphs, line["new"]))
+                self.wait()
+
+        """
+        if not glyphs:
+            raise ValueError("Empty glyph group.")
+
+        # Build new glyphs
+        style = glyphs[0].get_style()
+        if style_overrides is not None:
+            style.update(style_overrides)
+        new_glyphs = m.VGroup(
+            m.Text(
+                new_text,
+                font=font or self._font,
+                font_size=font_size or self._font_size,
+            )
+            .set_style(**style)
+            .move_to(glyphs, aligned_edge=align)
+            .submobjects
+        )
+
+        # Get character range for glyphs
+        lineno, char_start, char_end = self._glyphs_to_chars(glyphs)
+        original_line = self._original_lines[lineno]
+
+        # Get glyphs before and after
+        head = self._chars_to_glyphs(lineno, 0, char_start)
+        tail = self._chars_to_glyphs(lineno, char_end, len(original_line))
+
+        try:
+            result: Mapping[Hashable, m.VMobject] = {
+                "head": head,
+                "old": glyphs,
+                "new": new_glyphs,
+                "tail": tail,
+            }
+            yield m.VDict(result)
+
+        finally:
+            # Mutate string representation
+            self._original_lines[lineno] = (
+                original_line[:char_start] + new_text + original_line[char_end:]
+            )
+
+            # Mutate submobjects
+            container = self._get_glyphs_container(lineno)
+            idx0 = container.submobjects.index(glyphs[0])
+            container.remove(*glyphs)
+            container._insert_submobjects(idx0, new_glyphs.submobjects)
 
     def _get_tokens_at(
         self,
@@ -518,6 +745,16 @@ class SearchMixin:
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def _glyphs_to_chars(self, glyphs: m.VGroup) -> tuple[int, int, int]:
+        """Match *contiguous* glyphs to a character range."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _get_glyphs_container(self, lineno: int) -> m.VMobject:
+        """Return the VMobject containing the glyphs for a given line number."""
+        raise NotImplementedError
+
     def get_tokens(self) -> list[str]:
         """Return unique token types available in this text object.
 
@@ -546,9 +783,6 @@ class SearchableText(SearchMixin, m.Text):
     """A Text subclass with regex and semantic querying.
 
     Extends Text with regex-searching capabilities and token-based filtering.
-
-    Warning: mutating the glyphs will desynchronize them with the internal string
-    representation and will render subsequent searches brittle.
 
     Parameters
     ----------
@@ -586,7 +820,7 @@ class SearchableText(SearchMixin, m.Text):
     --------
     >>> text = SearchableText("Hello World", token_spans=[("greeting", 0, 0, 5)])
     >>> result = text.search(r"Hello")
-    VDict({'greeting': VGroup(VGroup of 5 submobjects)})
+    SearchResult({'greeting': VGroup(VGroup of 5 submobjects)})
     """
 
     def __init__(
@@ -613,9 +847,6 @@ class SearchableText(SearchMixin, m.Text):
         through cumulative offset calculation.
         """
         original_lines = original_string.split("\n")
-        self._line_starts = [0] + list(
-            itertools.accumulate(len(line) + 1 for line in original_lines)
-        )
         num_glyphs = len(self.submobjects)
         num_chars = len(original_string)
         assert num_chars == num_glyphs, (
@@ -626,6 +857,13 @@ class SearchableText(SearchMixin, m.Text):
         )
         return original_lines
 
+    @property
+    def _line_starts(self) -> list[int]:
+        """Compute the character offset for each line."""
+        return [0] + list(
+            itertools.accumulate(len(line) + 1 for line in self._original_lines)
+        )
+
     def _chars_to_glyphs(self, lineno: int, char_start: int, char_end: int) -> m.VGroup:
         """Retrieve glyphs for character range using offset-based indexing.
 
@@ -635,14 +873,27 @@ class SearchableText(SearchMixin, m.Text):
         offset = self._line_starts[lineno]
         return cast(m.VGroup, self[offset + char_start : offset + char_end])
 
+    def _glyphs_to_chars(self, glyphs: m.VGroup) -> tuple[int, int, int]:
+        """Match *contiguous* glyphs to a character range."""
+        try:
+            idx0 = self.submobjects.index(glyphs[0])
+        except ValueError as e:
+            raise ValueError("Glyphs not found.") from e
+        lineno = bisect_right(self._line_starts, idx0) - 1
+        offset = self._line_starts[lineno]
+        char_start = idx0 - offset
+        char_end = char_start + len(glyphs)
+        return lineno, char_start, char_end
+
+    def _get_glyphs_container(self, lineno: int) -> m.VMobject:
+        """Return self for all line numbers since all glyphs are in self.submobjects."""
+        return self
+
 
 class SearchableMarkup(SearchMixin, m.MarkupText):
-    r"""A MarkupText subclass with regex and semantic querying.
+    """A MarkupText subclass with regex and semantic querying.
 
     Extends MarkupText with regex-searching capabilities and token-based filtering.
-
-    Warning: mutating the glyphs will desynchronize them with the internal string
-    representation and will render subsequent searches brittle.
 
     Contrary to Text and Paragraph, MarkupText does NOT generate invisible glyphs for
     whitespace characters. To maintain a 1:1 correspondence between characters and
@@ -749,7 +1000,6 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
                         glyph_index += 1
 
         self.submobjects = glyphs
-        self._line_starts = line_starts
 
         num_glyphs = len(self.submobjects)
         num_chars = sum(len(line) for line in original_lines)
@@ -762,6 +1012,13 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
         )
         return original_lines
 
+    @property
+    def _line_starts(self) -> list[int]:
+        """Compute the character offset for each line."""
+        return [0] + list(
+            itertools.accumulate(len(line) for line in self._original_lines)
+        )
+
     def _chars_to_glyphs(self, lineno: int, char_start: int, char_end: int) -> m.VGroup:
         """Retrieve glyphs for character range using offset-based indexing.
 
@@ -771,14 +1028,27 @@ class SearchableMarkup(SearchMixin, m.MarkupText):
         offset = self._line_starts[lineno]
         return cast(m.VGroup, self[offset + char_start : offset + char_end])
 
+    def _glyphs_to_chars(self, glyphs: m.VGroup) -> tuple[int, int, int]:
+        """Match *contiguous* glyphs to a character range."""
+        try:
+            idx0 = self.submobjects.index(glyphs[0])
+        except ValueError as e:
+            raise ValueError("Glyphs not found.") from e
+        lineno = bisect_right(self._line_starts, idx0) - 1
+        offset = self._line_starts[lineno]
+        char_start = idx0 - offset
+        char_end = char_start + len(glyphs)
+        return lineno, char_start, char_end
+
+    def _get_glyphs_container(self, lineno: int) -> m.VMobject:
+        """Return self for all line numbers since all glyphs are in self.submobjects."""
+        return self
+
 
 class SearchableParagraph(SearchMixin, m.Paragraph):
     """A Paragraph subclass with regex and semantic querying.
 
     Extends Paragraph with regex-searching capabilities and token-based filtering.
-
-    Warning: mutating the glyphs will desynchronize them with the internal string
-    representation and will render subsequent searches brittle.
 
     Parameters
     ----------
@@ -855,6 +1125,25 @@ class SearchableParagraph(SearchMixin, m.Paragraph):
         """
         return cast(m.VGroup, self[lineno][char_start:char_end])
 
+    def _glyphs_to_chars(self, glyphs: m.VGroup) -> tuple[int, int, int]:
+        """Match *contiguous* glyphs to a character range."""
+        lineno = None
+        for idx, line in enumerate(self):
+            if glyphs[0] in line:
+                lineno = idx
+                break
+
+        if lineno is None:
+            raise ValueError("Glyphs not found.")
+
+        char_start = self[lineno].submobjects.index(glyphs[0])
+        char_end = char_start + len(glyphs)
+        return lineno, char_start, char_end
+
+    def _get_glyphs_container(self, lineno: int) -> m.VMobject:
+        """Return the VGroup for the corresponding line number."""
+        return self[lineno]
+
 
 class SearchableVGroup(m.VGroup):
     """Container for multiple Searchable objects with unified search capability.
@@ -897,7 +1186,7 @@ class SearchableVGroup(m.VGroup):
     >>> # Search with global line indexing
     >>> result = group.search(include_tokens=["DEFAULT"], lines=1)
     >>> result
-    VDict({'DEFAULT': VGroup(VGroup of 3 submobjects, VGroup of 3 submobjects)})
+    SearchResult({'DEFAULT': VGroup(VGroup of 3 submobjects, VGroup of 3 submobjects)})
 
     """
 
@@ -920,13 +1209,13 @@ class SearchableVGroup(m.VGroup):
         lines: int | Sequence[int] | slice | _Quantifier = ALL,
         lineno_from: int = 0,
         regex_flags: Sequence[re.RegexFlag] = (),
-    ) -> m.VDict:
+    ) -> SearchResult:
         """Search for regex patterns with optional token and line filtering.
 
         Performs regex matching across all Searchable submobjects using global line
         numbering. Token results are consolidated by type and returned as a VDict
-        mapping token names to VGroups of matched glyphs with a structure identical
-        to other Searchable mobjects.
+        subclass mapping token names to VGroups of matched glyphs with a structure
+        identical to other Searchable mobjects.
 
         Parameters
         ----------
@@ -953,7 +1242,7 @@ class SearchableVGroup(m.VGroup):
 
         Returns
         -------
-        VDict
+        SearchResult
             Dictionary mapping token types to VGroups of matched glyphs.
             Structure:
                 {token_type1:
@@ -973,7 +1262,7 @@ class SearchableVGroup(m.VGroup):
         - DEFAULT token represents unannotated text regions and can be included/excluded
           like any other token.
         """
-        results = m.VDict()
+        results = SearchResult(self)
 
         for mob in self.submobjects:
             if isinstance(mob, Searchable):
@@ -988,7 +1277,7 @@ class SearchableVGroup(m.VGroup):
 
                 lineno_from += mob.get_num_lines()
 
-                # Consolidate results into a single VDict
+                # Consolidate results into a single SearchResult
                 if res.submobjects:
                     for key, matches_vg in res.submob_dict.items():
                         if key not in results:
@@ -997,6 +1286,106 @@ class SearchableVGroup(m.VGroup):
                             results[key].add(match)
 
         return results
+
+    @contextmanager
+    def mutate(
+        self,
+        glyphs: m.VGroup,
+        new_text: str = "",
+        style_overrides: dict[str, Any] | None = None,
+        font: str | None = None,
+        font_size: float | None = None,
+        align: Vector3DLike = m.LEFT,
+    ) -> Generator[m.VDict]:
+        """Replace ``glyphs`` in the submobjects keeping the characters consistent.
+
+        WARNING: experimental functionality. Could leave the Searchable Mobject in an
+        inconsistent state. In particular the token spans are NOT updated, which means
+        a subsequent search could yield multiple matches where only one would be
+        expected.
+
+        The glyphs to replace MUST be contiguous and on the same line. The first glyph
+        is used to match the full sequence and to determine the styling for the new
+        glyphs.
+
+        The original glyphs are removed from the original object and the new ones are
+        added only after exiting the context manager to allow for greater control over
+        transition animations.
+
+        Parameters
+        ----------
+        glyphs
+            The glyphs to replace. ``ValueError`` will be raised if they cannot be
+            found in the submobjects.
+        new_text
+            The text by which to replace the glyphs. A `Text` object will be created
+            (matching the first glyph style) from which SVGMobjects will be extracted
+            to replace the original glyphs.
+        style_overrides
+            Optional key/Value pairs that can be used to override any style attribute
+            from the original glyphs.
+        font
+            The font for the new piece of text. If `None` (default), the original text
+            font is used.
+        font_size
+            The font size for the new piece of text. If `None` (default), the original
+            text font size is used.
+        align
+            The alignment for the new glyphs with respect to the first old glyph.
+            Can be used for RTL languages or to adjust the baseline for instance.
+
+        Yields
+        ------
+        A VDict containing 4 VGroups:
+         - "head": the glyphs that come before the mutated ones on the targeted line.
+         - "old": the replaced glyphs.
+         - "new": the new glyphs after mutation.
+         - "tail": the glyphs that come after the mutated ones on the targeted line.
+        This shape allows to easily animate the glyphs before/after the new ones in case
+        their width is different from the ones they replace.
+
+        Examples
+        --------
+        from manim import *
+
+        from manim_mjutils import SearchableText, SearchableVGroup
+
+
+        class MutateDemo(Scene):
+            def construct(self) -> None:
+                text = SearchableVGroup(SearchableText("Hello World"))
+                self.add(text)
+                result = text.search(r"Hello")
+                glyphs = result.first()
+                self.wait()
+                with text.mutate(glyphs, "Goodbye", align=UL) as line:
+                    self.play(
+                        line["tail"].animate.shift(
+                            RIGHT * (line["new"].width - glyphs.width)
+                        )
+                    )
+                    self.play(Transform(glyphs, line["new"]))
+                self.wait()
+
+        """
+        if not glyphs:
+            raise ValueError("Empty glyph group.")
+
+        for mob in self.submobjects:
+            if isinstance(mob, Searchable) and any(
+                submob is glyphs[0] for submob in mob.get_family()
+            ):
+                with mob.mutate(
+                    glyphs=glyphs,
+                    new_text=new_text,
+                    style_overrides=style_overrides,
+                    font=font,
+                    font_size=font_size,
+                    align=align,
+                ) as line:
+                    yield line
+                return
+        raise ValueError("Glyphs not found in a searchable submobject.")
 
     def get_tokens(self) -> list[str]:
         """Return unique token types available in all Searchable submobjects.

@@ -1,10 +1,17 @@
 import re
 
 import manim as m
+import numpy as np
 import pytest
 
 from manim_mjutils import SearchableText
-from manim_mjutils.mobject.text import ALL, NONE, SearchableMarkup, SearchableParagraph
+from manim_mjutils.mobject.text import (
+    ALL,
+    NONE,
+    SearchableMarkup,
+    SearchableParagraph,
+    SearchableVGroup,
+)
 
 # ----------------------------------------------------------------------
 # Setup
@@ -70,7 +77,8 @@ def paragraph():
 @pytest.fixture
 def markup():
     return SearchableMarkup(
-        *multiline.splitlines(),
+        multiline,
+        multiline,
         token_spans=[
             ("line1", 0, 0, 27),
             ("line2", 1, 0, 24),
@@ -374,3 +382,166 @@ def test_mixin_runs_lazy_init_once_on_first_call(oneline_text):
     t2l = oneline_text._token2lines
     oneline_text.search()
     assert t2l is oneline_text._token2lines
+
+
+# --------------------------------------------------------------------
+# mutate
+# --------------------------------------------------------------------
+def _first(obj, pattern):
+    return obj.search(pattern).first()
+
+
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["oneline_text", "multiline_text", "paragraph", "markup"],
+)
+def test_mutate_replaces_glyphs_and_updates_string(request, fixture_name):
+    obj = request.getfixturevalue(fixture_name)
+    glyphs = _first(obj, r"\bis\b")  # standalone "is", not the one in "This"
+    before = obj._get_glyphs_container(0).submobjects
+
+    with obj.mutate(glyphs, "WAS") as line:
+        ...
+
+    after = obj._get_glyphs_container(0).submobjects
+    assert [g for g in after if g not in line["new"]] == [
+        g for g in before if g not in glyphs
+    ]  # untouched glyphs, in order
+    assert not any(g is og for g in after for og in glyphs)  # old gone
+    assert all(any(g is ng for ng in after) for g in line["new"])  # new present
+    assert obj._original_lines[0].startswith("This WAS a ")
+
+
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["oneline_text", "multiline_text", "paragraph", "markup"],
+)
+def test_mutate_yielded_structure(request, fixture_name):
+    obj = request.getfixturevalue(fixture_name)
+    glyphs = _first(obj, r"\bis\b")
+
+    with obj.mutate(glyphs, "WAS") as line:
+        assert set(line.submob_dict.keys()) == {"head", "old", "new", "tail"}
+        assert (
+            line["head"].submobjects
+            + line["old"].submobjects
+            + line["tail"].submobjects
+            == obj._get_glyphs_container(0).submobjects[: len(obj._original_lines[0])]
+        )  # slice for multiline texts
+
+    # after CM new replaces old
+    assert (
+        line["head"].submobjects + line["new"].submobjects + line["tail"].submobjects
+        == obj._get_glyphs_container(0).submobjects[: len(obj._original_lines[0])]
+    )  # slice for multiline texts
+
+
+def test_mutate_aligns_new_glyphs_on_given_edge(oneline_text):
+    glyphs = _first(oneline_text, r"oneline")
+
+    with oneline_text.mutate(glyphs, "abc", align=m.UP) as line:
+        np.testing.assert_allclose(
+            line["new"].get_edge_center(m.UP), line["old"].get_edge_center(m.UP)
+        )
+
+
+def test_mutate_inherits_style_from_first_old_glyph(oneline_text):
+    # fixture sets color=m.BLUE
+    glyphs = _first(oneline_text, r"oneline")
+
+    with oneline_text.mutate(glyphs, "Hello") as line:
+        pass
+
+    styles = {g.fill_color for g in line["new"]}
+    assert styles == {m.BLUE}
+
+
+def test_mutate_first_chains_search_and_mutate(oneline_text):
+    with oneline_text.search(r"oneline").mutate_first("two words") as line:
+        pass
+
+    result = oneline_text.search(r"two\s+words")
+    inspector = Inspector(result)
+    assert (
+        len(inspector.matches()) == 3
+    )  # 1 per old token span: adjective, DEFAULT, noun
+    assert (
+        oneline_text._original_lines[0] == "This is a two wordsline string."
+    )  # 'first' only matches "one" (adjective)
+
+
+def test_search_maps_to_same_glyphs_after_length_changing_mutate(multiline_text):
+    before = _first(multiline_text, r"string")
+
+    with multiline_text.mutate(_first(multiline_text, r"multiline"), "tiny") as line:
+        pass
+
+    after = _first(multiline_text, r"string")
+    assert {id(g) for g in after} == {id(g) for g in before}
+
+
+def test_mutated_text_is_found_by_subsequent_search(oneline_text):
+    with oneline_text.mutate(_first(oneline_text, r"oneline"), "swell") as line:
+        pass
+
+    result = oneline_text.search(r"swell")
+    assert len(Inspector(result).glyphs()) == len("swell")
+
+
+def test_mutate_foreign_glyphs_raise_ValueError(oneline_text, multiline_text):
+    foreign = _first(multiline_text, r"This")
+
+    with (
+        pytest.raises(ValueError, match="Glyphs not found"),
+        oneline_text.mutate(foreign, "x") as line,
+    ):
+        pass
+
+
+def test_mutate_empty_glyph_group_raises_on_group():
+    group = SearchableVGroup(SearchableText("Hello World"))
+
+    with (
+        pytest.raises(ValueError, match="Empty"),
+        group.mutate(m.VGroup(), "x") as line,
+    ):
+        pass
+
+
+def test_group_mutate_dispatches_through_nesting():
+    inner = SearchableText("Hello World")
+    group = SearchableVGroup(SearchableVGroup(inner))
+    glyphs = group.search(r"World").first()
+
+    with group.mutate(glyphs, "Planet") as line:
+        pass
+
+    assert inner._original_lines[0] == "Hello Planet"
+    assert not any(g is og for g in group.get_family() for og in glyphs)
+
+
+def test_group_mutate_skips_non_searchable_siblings():
+    inner = SearchableText("Hello World")
+    group = SearchableVGroup(m.Square(), inner)  # non-searchable sibling first
+    glyphs = group.search(r"World").first()
+
+    with group.mutate(glyphs, "Planet") as line:
+        pass
+
+    assert inner._original_lines[0] == "Hello Planet"
+
+
+def test_mutate_to_empty_string_deletes_glyphs(oneline_text):
+    obj = oneline_text
+    glyphs = _first(obj, r"oneline")
+    n_old = len(glyphs)
+    n_before = len(obj.submobjects)
+
+    with obj.mutate(glyphs, "") as line:
+        n_new = len(line["new"])
+
+    assert n_new == 0
+    assert len(obj.submobjects) == n_before - n_old
+    assert obj._original_lines[0] == "This is a line string."
+    # remaining glyphs are still findable at their shifted positions
+    assert len(Inspector(obj.search(r"string")).glyphs()) == len("string")
