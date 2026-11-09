@@ -218,6 +218,85 @@ class CallbackAnimation(m.Animation):
             self._called = True
 
 
+class VariableParametersAnimationMixin:
+    """A Mixin that turns animation parameters into functions of progress.
+
+    Any keyword parameter of the parent animation that is normally stored as a constant
+    may instead be passed as a callable of one argument. At each frame, the callable
+    receives the animation progress (``alpha``) and the resulting value is used in place
+    of the constant.
+
+    Limitation: the parent animation must read the parameter from ``self`` at
+    interpolation time for the variation to have an effect. Parameters baked into the
+    constructor remain frozen regardless of the callable passed.
+
+    Note
+    ----
+    :class:`~.UpdateFromAlphaFunc` offers a similar mechanism at a lower level: it
+    receives alpha in a callback and hands you full responsibility for the mobject's
+    state each frame, discarding the parent animation's own interpolation. This mixin
+    instead keeps the parent animation's machinery and only varies the parameter values
+    that machinery reads. Use :class:`~.UpdateFromAlphaFunc` when the motion is bespoke;
+    use this mixin when the motion already exists in an animation class and only its
+    parameters need to change over time.
+
+    Examples
+    --------
+    class VariableParameterDemo(Scene):
+        def construct(self):
+            square = Square()
+
+            class VariableWiggle(VariableParametersAnimationMixin, Wiggle):
+                pass
+
+            self.play(
+                VariableWiggle(
+                    square,
+                    scale_value=lambda alpha: 1 + 3 * alpha,
+                    rotation_angle=lambda alpha: 0.5 * alpha,
+                    n_wiggles=16,
+                    run_time=5,
+                )
+            )
+    """
+
+    # kwargs that belong to Animation's machinery, not to the concrete animation's
+    # parameters. rate_func is callable and must NOT be captured as a
+    # "variable parameter".
+    CONTROL_KEYS = {
+        "run_time",
+        "rate_func",
+        "name",
+        "remover",
+        "introducer",
+        "suspend_mobject_updating",
+        "lag_ratio",
+        "reverse",
+    }
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._var_funcs = {}
+        const = {}
+        for key, value in kwargs.items():
+            if callable(value) and key not in self.CONTROL_KEYS:
+                self._var_funcs[key] = value
+            else:
+                const[key] = value
+        self._alpha = 0.0
+        super().__init__(*args, **const)
+
+    def __getattribute__(self, key: str) -> Any:
+        var_funcs = object.__getattribute__(self, "_var_funcs")
+
+        if key in var_funcs:
+            return var_funcs[key](object.__getattribute__(self, "_alpha"))
+        return object.__getattribute__(self, key)
+
+    def interpolate(self, alpha: float) -> None:
+        self._alpha = alpha
+        super().interpolate(alpha)  # type: ignore[misc]
+
+
 class Shatter(m.Animation):
     """Explode a mobject into its constituent family members.
 

@@ -369,6 +369,37 @@ Shamelessly stolen from @nikolaj on manim's discord server!
 
 ```  
 
+#### VariableParametersAnimationMixin
+
+A Mixin that turns animation parameters into functions of progress.
+Any keyword parameter of the parent animation that is normally stored as a constant may instead be passed as a callable of one argument. At each frame, the callable receives the animation progress (``alpha``) and the resulting value is used in place of the constant.
+
+Difference with UpdateFromAlphaFunc: UpdateFromAlphaFunc offers a similar mechanism at a lower level: it receives alpha in a callback and hands you full responsibility for the mobject's state each frame, discarding the parent animation's own interpolation. This mixin instead keeps the parent animation's machinery and only varies the parameter values that machinery reads. Use UpdateFromAlphaFunc when the motion is bespoke; use this mixin when the motion already exists in an animation class and only its parameters need to change over time.
+
+```python
+from manim import *
+from manim_mjutils import VariableParametersAnimationMixin
+
+class VariableParameterDemo(Scene):
+    def construct(self):
+        square = Square()
+
+        class VariableWiggle(VariableParametersAnimationMixin, Wiggle):
+            pass
+
+        self.play(
+            VariableWiggle(
+                square,
+                scale_value=lambda alpha: 1 + 3 * alpha,
+                rotation_angle=lambda alpha: 0.5 * alpha,
+                n_wiggles=16,
+                run_time=5,
+            )
+        )
+```  
+
+---  
+
 #### Shatter
 
 An Animation that disperses a mobject's family members into independent pieces that fly radially outward, spin, and fade. Pieces are removed from the scene on cleanup (if remover is True).
