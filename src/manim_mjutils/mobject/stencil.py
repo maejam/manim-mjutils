@@ -51,8 +51,7 @@ class Stencil(m.VMobject):
         self.add(self._clip)
 
         self._make_stencil()
-        if self._wrapped:
-            self.add_updater(self._adapt_stencil, call_updater=True)
+        self.add_updater(self._adapt_stencil, call_updater=True)
 
     def _make_stencil(self) -> None:
         """Recompute the stencil geometry."""
@@ -64,11 +63,12 @@ class Stencil(m.VMobject):
 
     def _adapt_stencil(self, mob: m.Mobject) -> None:
         """Keep the stencil aligned with the wrapped Mobject."""
-        if self._wrapped is None:
-            return
-        w, h, _, center = get_bounds(self._wrapped, as_len=True, include_stroke=True)
-        r = m.Rectangle(width=w + 2 * Pixels, height=h + 2 * Pixels).move_to(center)
-        self._shape.match_points(r)
+        if self._wrapped is not None:
+            w, h, _, center = get_bounds(
+                self._wrapped, as_len=True, include_stroke=True
+            )
+            r = m.Rectangle(width=w + 2 * Pixels, height=h + 2 * Pixels).move_to(center)
+            self._shape.match_points(r)
         self._make_stencil()
 
     @property
