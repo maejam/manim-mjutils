@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import random
 from collections.abc import Callable, Iterable
 from typing import Any, cast
@@ -338,7 +339,7 @@ class Shatter(m.Animation):
 
     def __init__(
         self,
-        mobject: m.VMobject,
+        mobject: m.Mobject,
         dispersion_factor: float = 6.0,
         rotation_amplitude: float = m.PI / 3,
         fade: bool = True,
@@ -412,5 +413,6 @@ class Shatter(m.Animation):
             if d_alpha != 0:
                 piece.rotate(angle * d_alpha, about_point=piece.get_center())
             if self.fade:
-                piece.set_fill(opacity=fill_opacity * (1 - alpha))
-                piece.set_stroke(opacity=stroke_opacity * (1 - alpha))
+                with contextlib.suppress(TypeError):
+                    piece.set_fill(opacity=fill_opacity * (1 - alpha))
+                    piece.set_stroke(opacity=stroke_opacity * (1 - alpha))
