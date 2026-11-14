@@ -29,10 +29,6 @@ class IconText(m.Group):
         The text string to display next to the icon.
     icon_height
         The target height of the icon in Munits.
-    font_size
-        The font size for the text.
-    font
-        The font family to use for the text.
     svg_icon_color
         The fill color for SVG icons. Ignored for raster images and VMobjects.
         Set to `None` (default) to keep original color.
@@ -45,8 +41,8 @@ class IconText(m.Group):
         - 3: BICUBIC
         - 4: BOX
         - 5: HAMMING
-    text_color
-        The color of the text (default WHITE).
+    text_params
+        Optional dictionary parameters for the text.
     direction
         The direction in which to arrange the icon and text (default RIGHT).
     buff
@@ -68,11 +64,9 @@ class IconText(m.Group):
         icon: m.VMobject | str | Path | None = None,
         text: str = "",
         icon_height: float = 0.5,
-        font_size: float = 48,
-        font: str = "Monospace",
-        svg_icon_color: m.ManimColor | None = None,
+        svg_icon_color: m.ManimColor | str | None = None,
         img_resampling_algo: Image.Resampling | int = Image.Resampling.LANCZOS,
-        text_color: m.ManimColor = m.WHITE,
+        text_params: dict[str, Any] | None = None,
         direction: Vector3DLike = m.RIGHT,
         buff: float = 0.15,
         **kwargs: Any,
@@ -110,8 +104,8 @@ class IconText(m.Group):
             self.icon.scale(icon_height / self.icon.height)
 
         # text
-        self.text = m.Text(text, font=font, font_size=font_size)
-        self.text.set_color(text_color)
+        text_params = text_params or {}
+        self.text = m.Text(text, **text_params)
 
         # arrange
         self.add(self.icon, self.text)
@@ -137,15 +131,11 @@ class VIconText(m.VGroup):
         The text string to display next to the icon.
     icon_height
         The target height of the icon in Munits.
-    font_size
-        The font size for the text.
-    font
-        The font family to use for the text.
     svg_icon_color
         The fill color for SVG icons. Ignored for VMobjects.
         Set to `None` (default) to keep original color.
-    text_color
-        The color of the text (default WHITE).
+    text_params
+        Optional dictionary parameters for the text.
     direction
         The direction in which to arrange the icon and text (default RIGHT).
     buff
@@ -167,10 +157,8 @@ class VIconText(m.VGroup):
         icon: m.VMobject | str | Path | None = None,
         text: str = "",
         icon_height: float = 0.5,
-        font_size: float = 48,
-        font: str = "Monospace",
-        svg_icon_color: m.ManimColor | None = None,
-        text_color: m.ManimColor = m.WHITE,
+        svg_icon_color: m.ManimColor | str | None = None,
+        text_params: dict[str, Any] | None = None,
         direction: Vector3DLike = m.RIGHT,
         buff: float = 0.15,
         **kwargs: Any,
@@ -199,8 +187,8 @@ class VIconText(m.VGroup):
             self.icon.scale(icon_height / self.icon.height)
 
         # text
-        self.text = m.Text(text, font=font, font_size=font_size)
-        self.text.set_color(text_color)
+        text_params = text_params or {}
+        self.text = m.Text(text, **text_params)
 
         # arrange
         self.add(self.icon, self.text)
