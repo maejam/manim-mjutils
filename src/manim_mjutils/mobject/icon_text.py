@@ -83,7 +83,7 @@ class IconText(m.Group):
         self.icon: m.SVGMobject | m.ImageMobject | m.VMobject
 
         if isinstance(icon, str):
-            path = Path(icon).expanduser().resolve()
+            path = Path(f"{m.config.assets_dir}/{icon}").expanduser().resolve()
             if path.suffix.lower() == ".svg":
                 self.icon = m.SVGMobject(path, fill_color=svg_icon_color)
             else:
@@ -181,7 +181,7 @@ class VIconText(m.VGroup):
         self.icon: m.SVGMobject | m.VMobject
 
         if isinstance(icon, str):
-            path = Path(icon).expanduser().resolve()
+            path = Path(f"{m.config.assets_dir}/{icon}").expanduser().resolve()
             if path.suffix.lower() == ".svg":
                 self.icon = m.SVGMobject(path, fill_color=svg_icon_color)
             else:
